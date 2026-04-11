@@ -13,19 +13,20 @@ const API_TOKEN = process.env.STRAPI_API_TOKEN;
 export async function fetchAPI(
   path: string, 
   urlParamsObject = {}, 
-  options: { revalidate?: number; method?: string; body?: any; cache?: RequestCache } = {}
+  options: { revalidate?: number; method?: string; body?: any; cache?: RequestCache; auth?: boolean } = {}
 ) {
   try {
-    // Construct Strapi query params properly with qs or manual mapping if light.
-    // For simplicity, we manually map a simple subset or just append raw params.
     const queryString = new URLSearchParams(urlParamsObject).toString();
     const requestUrl = `${API_URL}/api${path}${queryString ? `?${queryString}` : ''}`;
     
+    // By default use token, unless explicitly disabled
+    const useAuth = options.auth !== false;
+
     const response = await fetch(requestUrl, {
       method: options.method || 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(API_TOKEN && { Authorization: `Bearer ${API_TOKEN}` }),
+        ...(useAuth && API_TOKEN && { Authorization: `Bearer ${API_TOKEN}` }),
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
       next: { revalidate: options.revalidate !== undefined ? options.revalidate : 3600 },

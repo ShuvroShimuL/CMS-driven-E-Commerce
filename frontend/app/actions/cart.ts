@@ -37,7 +37,7 @@ export async function getCart() {
 
   const response = await fetchAPI('/carts', {
     'filters[sessionId][$eq]': sessionId
-  });
+  }, { auth: false, cache: 'no-store' });
 
   if (response.data && response.data.length > 0) {
     return response.data[0];
@@ -46,6 +46,8 @@ export async function getCart() {
   // If no cart exists in DB for this UUID, create an empty one
   const newCart = await fetchAPI('/carts', {}, {
     method: 'POST',
+    auth: false,
+    cache: 'no-store',
     body: {
       data: {
         sessionId,
@@ -82,6 +84,8 @@ export async function addToCart(productData: any) {
   // Update Strapi Cart
   await fetchAPI(`/carts/${cart.id}`, {}, {
     method: 'PUT',
+    auth: false,
+    cache: 'no-store',
     body: {
       data: {
         cartItems: currentItems
@@ -100,6 +104,8 @@ export async function clearCart() {
   const cart = await getCart();
   await fetchAPI(`/carts/${cart.id}`, {}, {
     method: 'PUT',
+    auth: false,
+    cache: 'no-store',
     body: {
       data: {
         cartItems: []

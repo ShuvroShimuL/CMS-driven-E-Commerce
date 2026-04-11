@@ -23,6 +23,8 @@ export async function processCheckout(formData: FormData) {
     // 1. Create Strapi Order
     const orderRes = await fetchAPI('/orders', {}, {
       method: 'POST',
+      auth: false,
+      cache: 'no-store',
       body: {
         data: {
           fullName: rawData.fullName,

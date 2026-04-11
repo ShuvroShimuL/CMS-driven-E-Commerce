@@ -21,11 +21,16 @@ export default function AddToCartButton({ product, isOutOfStock }: { product: an
       image: product.attributes.images?.data?.[0]?.attributes?.url || ''
     };
 
-    await addToCart(productData);
-    setLoading(false);
-    
-    // Send them to cart route instead of a silent alert
-    router.push('/cart');
+    try {
+      await addToCart(productData);
+      // Send them to cart route instead of a silent alert
+      router.push('/cart');
+    } catch (err) {
+      alert("Failed to add to cart. Please ensure Strapi is running and public permissions are set.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
