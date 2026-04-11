@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getProductBySlug, getProducts } from '@/lib/api';
+import AddToCartButton from '@/components/AddToCartButton';
 import styles from './page.module.css';
 
 export async function generateStaticParams() {
@@ -47,13 +48,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
           </div>
 
           <div className={styles.actions}>
-            <button 
-              className="btn-primary" 
-              style={{ flex: 1, opacity: isOutOfStock ? 0.5 : 1, cursor: isOutOfStock ? 'not-allowed' : 'pointer' }}
-              disabled={isOutOfStock}
-            >
-              {isOutOfStock ? 'Sold Out' : 'Add to Cart'}
-            </button>
+            <AddToCartButton product={product} isOutOfStock={isOutOfStock} />
           </div>
         </div>
       </div>

@@ -1,0 +1,100 @@
+.container {
+  padding: 4rem 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.title {
+  font-size: 2.5rem;
+  font-weight: 800;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.checkoutForm {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  padding: 3rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 600px) {
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field label {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.input {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 1rem;
+  background: var(--bg-primary);
+  transition: var(--transition);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+.paymentNotice {
+  background: var(--bg-tertiary);
+  padding: 1.5rem;
+  border-radius: var(--radius-md);
+  margin: 2rem 0;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-primary);
+}
+
+.submitBtn {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.125rem;
+}
+
+.successMessage {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+}
+
+.successIcon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.errorBox {
+  padding: 1rem;
+  background-color: #fee2e2;
+  color: var(--accent-color);
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-sm);
+  margin-bottom: 2rem;
+}

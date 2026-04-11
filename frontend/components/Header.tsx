@@ -1,7 +1,11 @@
 import Link from 'next/link';
+import { getCart } from '@/app/actions/cart';
 import styles from './Header.module.css';
 
-export default function Header() {
+export default async function Header() {
+  const cart = await getCart();
+  const items = cart?.attributes?.cartItems || [];
+  const totalQuantity = items.reduce((acc: number, item: any) => acc + item.quantity, 0);
   return (
     <header className={styles.header}>
       <div className={`container ${styles.headerContainer}`}>
@@ -14,7 +18,7 @@ export default function Header() {
           <Link href="/about" className={styles.navLink}>About</Link>
         </nav>
         <div className={styles.actions}>
-          <button className={styles.cartBtn}>Cart (0)</button>
+          <Link href="/cart" className={styles.cartBtn}>Cart ({totalQuantity})</Link>
         </div>
       </div>
     </header>

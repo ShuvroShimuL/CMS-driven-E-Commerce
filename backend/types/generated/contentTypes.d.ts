@@ -856,6 +856,7 @@ export interface ApiOrderOrder extends Schema.CollectionType {
     draftAndPublish: false;
   };
   attributes: {
+    email: Attribute.String & Attribute.Required;
     fullName: Attribute.String & Attribute.Required;
     phone: Attribute.String & Attribute.Required;
     fullAddress: Attribute.Text & Attribute.Required;
