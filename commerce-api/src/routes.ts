@@ -66,7 +66,7 @@ router.post('/payments/sslcommerz/initiate', async (req, res) => {
       `, [item.id, item.quantity]);
 
       if (lockRes.rowCount === 0) {
-        throw new Error(\`Product \${item.id} is out of stock or currently locked by another checkout.\`);
+        throw new Error(`Product ${item.id} is out of stock or currently locked by another checkout.`);
       }
 
       // Decrement Available, Increment Reserved
@@ -92,7 +92,7 @@ router.post('/payments/sslcommerz/initiate', async (req, res) => {
     await client.query('COMMIT');
     
     // Simulate SSLCommerz Response for Sprint 5 logic
-    const gatewayUrl = \`https://sandbox.sslcommerz.com/mock_gateway/\${transaction_id}\`;
+    const gatewayUrl = `https://sandbox.sslcommerz.com/mock_gateway/${transaction_id}`;
     
     res.json({ success: true, transaction_id, gatewayUrl });
 
@@ -190,4 +190,4 @@ router.post('/payments/ipn/sslcommerz', async (req, res) => {
   }
 });
 
-export default router;
+export { router as commerceRoutes };

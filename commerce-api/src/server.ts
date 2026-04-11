@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import commerceRoutes from './routes';
+import { commerceRoutes } from './routes';
 import './cron';
 
 dotenv.config();
@@ -20,5 +20,5 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(\`Commerce API active on port \${port}\`);
+  console.log(`Commerce API active on port ${port}`);
 });

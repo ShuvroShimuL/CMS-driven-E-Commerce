@@ -34,7 +34,7 @@ cron.schedule('* * * * *', async () => {
         WHERE id = $1
       `, [transaction.id]);
       
-      console.log(\`Released inventory lock for expired transaction \${transaction.transaction_id}\`);
+      console.log(`Released inventory lock for expired transaction ${transaction.transaction_id}`);
     }
 
     await client.query('COMMIT');
