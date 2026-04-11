@@ -22,16 +22,22 @@ export async function fetchAPI(
     // By default use token, unless explicitly disabled
     const useAuth = options.auth !== false;
 
-    const response = await fetch(requestUrl, {
+    const fetchOptions: RequestInit = {
       method: options.method || 'GET',
       headers: {
         'Content-Type': 'application/json',
         ...(useAuth && API_TOKEN && { Authorization: `Bearer ${API_TOKEN}` }),
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
-      next: { revalidate: options.revalidate !== undefined ? options.revalidate : 3600 },
-      cache: options.cache
-    });
+    };
+
+    if (options.cache) {
+      fetchOptions.cache = options.cache;
+    } else {
+      fetchOptions.next = { revalidate: options.revalidate !== undefined ? options.revalidate : 3600 };
+    }
+
+    const response = await fetch(requestUrl, fetchOptions);
 
     // Check if empty response (e.g. 204 status without body)
     if (response.status === 204) return null;

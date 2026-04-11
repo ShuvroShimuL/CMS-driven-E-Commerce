@@ -13,20 +13,7 @@ const COOKIE_NAME = 'cart_session';
 export async function getCartSessionId() {
   const cookieStore = cookies();
   const existingCookie = cookieStore.get(COOKIE_NAME);
-
-  if (existingCookie) {
-    return existingCookie.value;
-  }
-
-  const newSessionId = randomUUID();
-  cookieStore.set(COOKIE_NAME, newSessionId, { 
-    httpOnly: true, 
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24 * 30, // 30 days
-    path: '/'
-  });
-
-  return newSessionId;
+  return existingCookie ? existingCookie.value : null;
 }
 
 /**
@@ -34,36 +21,53 @@ export async function getCartSessionId() {
  */
 export async function getCart() {
   const sessionId = await getCartSessionId();
+  if (!sessionId) return null;
 
   const response = await fetchAPI('/carts', {
     'filters[sessionId][$eq]': sessionId
   }, { auth: false, cache: 'no-store' });
 
-  if (response.data && response.data.length > 0) {
+  if (response?.data && response.data.length > 0) {
     return response.data[0];
   }
 
-  // If no cart exists in DB for this UUID, create an empty one
-  const newCart = await fetchAPI('/carts', {}, {
-    method: 'POST',
-    auth: false,
-    cache: 'no-store',
-    body: {
-      data: {
-        sessionId,
-        cartItems: []
-      }
-    }
-  });
-
-  return newCart.data;
+  return null;
 }
 
 /**
  * Add product to cart. 
  */
 export async function addToCart(productData: any) {
-  const cart = await getCart();
+  let cart = await getCart();
+  let sessionId = await getCartSessionId();
+
+  // If no session, create one (this is a Server Action so cookies().set is allowed)
+  if (!sessionId) {
+    sessionId = randomUUID();
+    cookies().set(COOKIE_NAME, sessionId, { 
+      httpOnly: true, 
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      path: '/'
+    });
+  }
+
+  // If no cart, create it in Strapi
+  if (!cart) {
+    const newCartRes = await fetchAPI('/carts', {}, {
+      method: 'POST',
+      auth: false,
+      cache: 'no-store',
+      body: {
+        data: {
+          sessionId,
+          cartItems: []
+        }
+      }
+    });
+    cart = newCartRes.data;
+  }
+
   const currentItems = cart.attributes.cartItems || [];
 
   const existingItemIndex = currentItems.findIndex((item: any) => item.id === productData.id);
@@ -102,6 +106,8 @@ export async function addToCart(productData: any) {
  */
 export async function clearCart() {
   const cart = await getCart();
+  if (!cart) return;
+
   await fetchAPI(`/carts/${cart.id}`, {}, {
     method: 'PUT',
     auth: false,
