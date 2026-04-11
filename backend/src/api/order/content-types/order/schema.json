@@ -11,6 +11,10 @@
   },
   "pluginOptions": {},
   "attributes": {
+    "email": {
+      "type": "string",
+      "required": true
+    },
     "fullName": {
       "type": "string",
       "required": true
