@@ -4,7 +4,17 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Sanitize the URL perfectly in case of copy-paste invisible quotes or whitespaces from Render dashboard
-const cleanDbUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim().replace(/['"]/g, '') : '';
+let cleanDbUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim().replace(/['"]/g, '') : '';
+
+// 🚀 Ultimate Autocorrect for Supabase Supavisor:
+// If the user's Render environment string is missing the [project_ref] suffix in the username, 
+// Supabase's PgBouncer throws "Invalid format for user or db_name". This structurally forces the correct format.
+if (cleanDbUrl.includes('.pooler.supabase.com')) {
+    if (cleanDbUrl.includes('postgres:') && !cleanDbUrl.includes('postgres.vhjpcyinxotihfusjwli:')) {
+        cleanDbUrl = cleanDbUrl.replace('postgres:', 'postgres.vhjpcyinxotihfusjwli:');
+        console.log('[DB] Actively autocorrected Supabase pooler username format.');
+    }
+}
 
 export const pool = new Pool({
   connectionString: cleanDbUrl,
