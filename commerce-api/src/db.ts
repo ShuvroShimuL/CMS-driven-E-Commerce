@@ -3,8 +3,11 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// Sanitize the URL perfectly in case of copy-paste invisible quotes or whitespaces from Render dashboard
+const cleanDbUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim().replace(/['"]/g, '') : '';
+
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: cleanDbUrl,
   ssl: { rejectUnauthorized: false }
 });
 
