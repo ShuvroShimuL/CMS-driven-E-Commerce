@@ -50,10 +50,11 @@ router.post('/payments/sslcommerz/initiate', async (req, res) => {
   const { items, customer, subtotal } = req.body;
   const transaction_id = uuidv4();
 
-  const client = await pool.connect();
+  let client;
   let lockAcquired = false;
 
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
 
     for (const item of items) {
@@ -97,10 +98,10 @@ router.post('/payments/sslcommerz/initiate', async (req, res) => {
     res.json({ success: true, transaction_id, gatewayUrl });
 
   } catch (error: any) {
-    await client.query('ROLLBACK');
-    res.status(400).json({ success: false, message: error.message });
+    if (client) await client.query('ROLLBACK');
+    res.status(400).json({ success: false, message: error.message || 'Database connection or locking failed' });
   } finally {
-    client.release();
+    if (client) client.release();
   }
 });
 

@@ -35,8 +35,15 @@ export async function processCheckout(formData: FormData) {
     });
 
     if (!initRes.ok) {
-      const errorData = await initRes.json();
-      throw new Error(errorData.message || "Checkout failed at Gateway level");
+      const contentType = initRes.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const errorData = await initRes.json();
+        throw new Error(errorData.message || "Checkout failed at Gateway level");
+      } else {
+        const textError = await initRes.text();
+        console.error("Render HTML Error Dump:", textError);
+        throw new Error("Unable to connect to Commerce API securely. Check Render logs.");
+      }
     }
 
     const { transaction_id, gatewayUrl } = await initRes.json();
