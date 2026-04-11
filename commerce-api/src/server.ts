@@ -1,3 +1,7 @@
+import dns from 'dns';
+// Force IPv4 natively before Express or Node networking initializes
+dns.setDefaultResultOrder('ipv4first');
+
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
