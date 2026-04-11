@@ -18,8 +18,9 @@ export default function CheckoutPage() {
     const formData = new FormData(e.currentTarget);
     const result = await processCheckout(formData);
 
-    if (result.success) {
-      setSuccessId(result.orderId!);
+    if (result.success && result.redirectUrl) {
+      // Sprint 5: SSLCommerz Gateway Redirect
+      window.location.href = result.redirectUrl;
     } else {
       setError(result.error || 'Checkout failed. Please try again.');
     }
@@ -88,7 +89,7 @@ export default function CheckoutPage() {
         </div>
 
         <div className={styles.paymentNotice}>
-          🚚 Payment Method: Cash on Delivery (Pay when you receive the package)
+          🔒 Secure Payment via SSLCommerz (Cards, Mobile Banking, Net Banking)
         </div>
 
         <button 

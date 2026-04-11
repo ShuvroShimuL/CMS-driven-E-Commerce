@@ -20,61 +20,34 @@ export async function processCheckout(formData: FormData) {
 
     const subtotal = items.reduce((acc: number, item: any) => acc + (parseFloat(item.price) * item.quantity), 0);
 
-    // 1. Create Strapi Order
-    const orderRes = await fetchAPI('/orders', {}, {
+    // Refactored for Sprint 5 Commerce Engine API
+    // 1. Fetch to Commerce microservice, locking inventory and getting Gateway URL
+    const COMMERCE_API = process.env.COMMERCE_API_URL || 'http://localhost:4000/api/v1';
+    
+    const initRes = await fetch(`${COMMERCE_API}/payments/sslcommerz/initiate`, {
       method: 'POST',
-      auth: false,
-      cache: 'no-store',
-      body: {
-        data: {
-          fullName: rawData.fullName,
-          email: rawData.email,
-          phone: rawData.phone,
-          fullAddress: rawData.fullAddress,
-          division: rawData.division,
-          district: rawData.district,
-          thana: rawData.thana,
-          cartItems: items,
-          totalAmount: subtotal,
-          status: 'pending' // CoD Default
-        }
-      }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items,
+        customer: rawData,
+        subtotal
+      })
     });
 
-    const orderId = orderRes?.data?.id;
-    if (!orderId) throw new Error("Failed to generate order record");
-
-    // 1.5 Deduct Stock from Products
-    for (const item of items) {
-      try {
-        // Fetch current product to safely read current stock
-        // We use default fetchAPI which includes the Authorization Token
-        const productData = await fetchAPI(`/products/${item.id}`);
-        if (productData?.data) {
-          const currentStock = productData.data.attributes.stock || 0;
-          const newStock = Math.max(0, currentStock - item.quantity);
-          
-          await fetchAPI(`/products/${item.id}`, {}, {
-            method: 'PUT',
-            body: {
-              data: {
-                stock: newStock
-              }
-            }
-          });
-        }
-      } catch (e) {
-        console.error("Failed to deduct stock for product", item.id, e);
-      }
+    if (!initRes.ok) {
+      const errorData = await initRes.json();
+      throw new Error(errorData.message || "Checkout failed at Gateway level");
     }
 
-    // 2. Fire Brevo Email (Fire & Forget or Await)
-    await sendConfirmationEmail(rawData.email as string, rawData.fullName as string, orderId, subtotal);
+    const { transaction_id, gatewayUrl } = await initRes.json();
 
-    // 3. Clear Cart
+    // In a real SSLCommerz sequence, you DO NOT clear the cart or send Brevo emails here!
+    // They are triggered solely by the Backend /ipn webhook ONLY whenever Payment = VALID!
+    // For Sprint 5 integration testing, we just clear the session cart returning the redirect
     await clearCart();
 
-    return { success: true, orderId };
+    return { success: true, redirectUrl: gatewayUrl };
+
   } catch (err: any) {
     console.error("Checkout process failed:", err.message);
     return { success: false, error: err.message };
