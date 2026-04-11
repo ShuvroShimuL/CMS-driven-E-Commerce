@@ -4,7 +4,7 @@ import dns from 'dns';
 // This definitively crushes the Render pg-pool ENETUNREACH bug by bypassing connection-string logic completely.
 const originalLookup = dns.lookup;
 // @ts-ignore
-dns.lookup = function (hostname, options, callback) {
+dns.lookup = function (hostname: any, options: any, callback: any) {
     if (typeof options === 'function') {
         callback = options;
         options = { family: 4 };
@@ -13,6 +13,7 @@ dns.lookup = function (hostname, options, callback) {
     } else {
         options = { family: 4 };
     }
+    // @ts-ignore
     return originalLookup(hostname, options, callback);
 };
 import express from 'express';
