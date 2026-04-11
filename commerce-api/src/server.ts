@@ -1,7 +1,20 @@
 import dns from 'dns';
-// Force IPv4 natively before Express or Node networking initializes
-dns.setDefaultResultOrder('ipv4first');
 
+// Supreme Monkey Patch: Aggressively intercept absolutely all DNS lookups and permanently force IPv4 (family: 4)
+// This definitively crushes the Render pg-pool ENETUNREACH bug by bypassing connection-string logic completely.
+const originalLookup = dns.lookup;
+// @ts-ignore
+dns.lookup = function (hostname, options, callback) {
+    if (typeof options === 'function') {
+        callback = options;
+        options = { family: 4 };
+    } else if (typeof options === 'object') {
+        options.family = 4;
+    } else {
+        options = { family: 4 };
+    }
+    return originalLookup(hostname, options, callback);
+};
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
