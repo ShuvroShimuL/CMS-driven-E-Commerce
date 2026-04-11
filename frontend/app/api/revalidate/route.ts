@@ -15,21 +15,8 @@ export async function POST(request: NextRequest) {
     // Strapi format is usually { event: 'entry.publish', model: 'product', entry: { slug: '...' } }
     const { event, model, entry } = body;
 
-    // We can selectively revalidate based on the model if needed
-    if (model === 'product' && entry?.slug) {
-      // Revalidate PDP
-      revalidatePath(`/product/${entry.slug}`);
-      // Revalidate all categories since we don't know exactly which category it might affect without deeply inspecting
-      revalidatePath(`/category/[slug]`, 'page');
-    } else if (model === 'category' && entry?.slug) {
-      revalidatePath(`/category/${entry.slug}`);
-    }
-
-    // Always burst the homepage cache to be safe
-    revalidatePath('/');
-    
-    // Also revalidate the main category page
-    revalidatePath('/category/all');
+    // Execute a global layout cache burst to ensure stock numbers synchronize instantly everywhere
+    revalidatePath('/', 'layout');
 
     return NextResponse.json({ revalidated: true, now: Date.now() });
   } catch (err) {

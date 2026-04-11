@@ -93,7 +93,7 @@ export async function addToCart(productData: any) {
     }
   });
 
-  revalidatePath('/cart');
+  revalidatePath('/', 'layout');
   return { success: true };
 }
 
@@ -113,5 +113,5 @@ export async function clearCart() {
     }
   });
   
-  revalidatePath('/cart');
+  revalidatePath('/', 'layout');
 }

@@ -44,6 +44,30 @@ export async function processCheckout(formData: FormData) {
     const orderId = orderRes?.data?.id;
     if (!orderId) throw new Error("Failed to generate order record");
 
+    // 1.5 Deduct Stock from Products
+    for (const item of items) {
+      try {
+        // Fetch current product to safely read current stock
+        // We use default fetchAPI which includes the Authorization Token
+        const productData = await fetchAPI(`/products/${item.id}`);
+        if (productData?.data) {
+          const currentStock = productData.data.attributes.stock || 0;
+          const newStock = Math.max(0, currentStock - item.quantity);
+          
+          await fetchAPI(`/products/${item.id}`, {}, {
+            method: 'PUT',
+            body: {
+              data: {
+                stock: newStock
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.error("Failed to deduct stock for product", item.id, e);
+      }
+    }
+
     // 2. Fire Brevo Email (Fire & Forget or Await)
     await sendConfirmationEmail(rawData.email as string, rawData.fullName as string, orderId, subtotal);
 
