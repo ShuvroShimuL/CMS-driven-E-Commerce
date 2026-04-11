@@ -1,0 +1,159 @@
+openapi: 3.0.3
+info:
+  title: Storefront API Contract
+  version: 1.0.0
+  description: API openapi specification between the Next.js Storefront and Strapi backend.
+paths:
+  /api/products:
+    get:
+      summary: Get all products
+      description: Returns a list of published products for the Product Listing Page (PLP).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Product"
+  /api/products/{slug}:
+    get:
+      summary: Get a standard single product by slug
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema:
+            type: string
+          description: The slug of the product
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Product"
+  /api/categories:
+    get:
+      summary: Get all categories
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Category"
+  /api/orders:
+    post:
+      summary: Create an Order (Cash on Delivery)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data:
+                  type: object
+                  properties:
+                    fullName:
+                      type: string
+                    phone:
+                      type: string
+                    fullAddress:
+                      type: string
+                    division:
+                      type: string
+                    district:
+                      type: string
+                    thana:
+                      type: string
+                    cartItems:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          productId:
+                            type: integer
+                          quantity:
+                            type: integer
+      responses:
+        "201":
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Order"
+components:
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        attributes:
+          type: object
+          properties:
+            title:
+              type: string
+            slug:
+              type: string
+            description:
+              type: string
+            price:
+              type: number
+            stock:
+              type: integer
+            status:
+              type: string
+            images:
+              type: object
+            categories:
+              type: object
+            createdAt:
+              type: string
+              format: date-time
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        attributes:
+          type: object
+          properties:
+            name:
+              type: string
+            slug:
+              type: string
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+        attributes:
+          type: object
+          properties:
+            orderNumber:
+              type: string
+            status:
+              type: string
+            totalAmount:
+              type: number
+            createdAt:
+              type: string
+              format: date-time
