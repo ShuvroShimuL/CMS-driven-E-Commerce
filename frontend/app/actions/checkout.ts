@@ -89,7 +89,7 @@ async function sendConfirmationEmail(customerEmail: string, customerName: string
   }
 
   const payload = {
-    sender: { name: "Premium Store", email: "noreply@premiumstore.com" },
+    sender: { name: "Premium Store", email: process.env.BREVO_SENDER_EMAIL || "shamimrshimul0403@gmail.com" },
     to: [{ email: customerEmail, name: customerName }],
     bcc: [{ email: "shamimrshimul0403@gmail.com", name: "Admin" }],
     subject: `Order Confirmation #${orderId} - Premium Store`,
