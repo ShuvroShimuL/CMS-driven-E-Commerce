@@ -3,7 +3,12 @@ import { getCart } from '@/app/actions/cart';
 import styles from './page.module.css';
 
 export default async function CartPage() {
-  const cart = await getCart();
+  let cart = null;
+  try {
+    cart = await getCart();
+  } catch (err) {
+    console.error("Cart Fetch Failed on CartPage:", err);
+  }
   const items = cart?.attributes?.cartItems || [];
 
   const subtotal = items.reduce((acc: number, item: any) => acc + (parseFloat(item.price) * item.quantity), 0);

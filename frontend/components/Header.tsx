@@ -3,8 +3,13 @@ import { getCart } from '@/app/actions/cart';
 import styles from './Header.module.css';
 
 export default async function Header() {
-  const cart = await getCart();
-  const items = cart?.attributes?.cartItems || [];
+  let items = [];
+  try {
+    const cart = await getCart();
+    items = cart?.attributes?.cartItems || [];
+  } catch (err) {
+    console.error("Silent Cart Failure:", err);
+  }
   const totalQuantity = items.reduce((acc: number, item: any) => acc + item.quantity, 0);
   return (
     <header className={styles.header}>
