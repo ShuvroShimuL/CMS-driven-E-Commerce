@@ -24,9 +24,7 @@ async function sendBrevoEmail(
       sender: { name: FROM_NAME, email: BREVO_SENDER },
       to:     [{ email: to, name: toName }],
       subject,
-      htmlContent: html,
-      trackClicks: false,
-      trackOpens:  false
+      htmlContent: html
     })
   });
   if (!res.ok) {
