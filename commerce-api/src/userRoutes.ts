@@ -367,7 +367,7 @@ userRouter.post('/forgot-password', async (req, res) => {
     res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
   } catch (err: any) {
     console.error('[ForgotPassword]', err.message);
-    res.status(500).json({ error: 'Failed to process request', detail: err.message });
+    res.status(500).json({ error: 'Failed to process request', detail: err.message, cause: err.cause?.message || String(err.cause) });
   } finally { client.release(); }
 });
 
