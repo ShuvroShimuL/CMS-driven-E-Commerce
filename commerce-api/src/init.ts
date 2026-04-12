@@ -5,7 +5,7 @@ async function initializeDatabase() {
   try {
     await client.query('BEGIN');
 
-    // Create table for duplicated product data (Inventory)
+    // ── Sprint 5: Inventory & Transactions ────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS commerce_inventory (
         id SERIAL PRIMARY KEY,
@@ -19,7 +19,6 @@ async function initializeDatabase() {
       )
     `);
 
-    // Create table for tracking active Cart/Order sessions and transactions
     await client.query(`
       CREATE TABLE IF NOT EXISTS commerce_transactions (
         id SERIAL PRIMARY KEY,
@@ -33,11 +32,58 @@ async function initializeDatabase() {
       )
     `);
 
+    // ── Sprint 6: User accounts ───────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS commerce_users (
+        id BIGSERIAL PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        full_name TEXT,
+        phone TEXT,
+        cart_session_id TEXT,
+        is_verified BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS commerce_otps (
+        id BIGSERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        otp_code TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS commerce_refresh_tokens (
+        id BIGSERIAL PRIMARY KEY,
+        user_id BIGINT REFERENCES commerce_users(id) ON DELETE CASCADE,
+        token_hash TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS commerce_password_resets (
+        id BIGSERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        token_hash TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
     await client.query('COMMIT');
-    console.log('Commerce Engine DB Tables Created Successfully!');
+    console.log('✅ Commerce Engine DB Tables Initialized Successfully!');
   } catch (e) {
     await client.query('ROLLBACK');
-    console.error('Migration failed:', e);
+    console.error('❌ Migration failed:', e);
   } finally {
     client.release();
     pool.end();

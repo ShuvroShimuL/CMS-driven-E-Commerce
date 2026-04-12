@@ -20,6 +20,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { commerceRoutes } from './routes';
+import { userRouter } from './userRoutes';
 import './cron';
 
 dotenv.config();
@@ -32,9 +33,10 @@ app.use(express.json());
 
 // Main Microservice Gateway
 app.use('/api/v1', commerceRoutes);
+app.use('/api/v1/users', userRouter);
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'active', service: 'commerce-api' });
+  res.json({ status: 'active', service: 'commerce-api', sprint: 6 });
 });
 
 app.listen(port, () => {
