@@ -74,6 +74,76 @@ router.post('/admin/release-stuck', async (req, res) => {
 });
 
 // ----------------------------------------------------
+// Admin: Wipe inventory table (useful before a full re-sync)
+// ----------------------------------------------------
+router.post('/admin/clear-inventory', async (req, res) => {
+  try {
+    await pool.query('TRUNCATE TABLE commerce_inventory RESTART IDENTITY');
+    res.json({ success: true, message: 'Inventory table cleared' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// Admin: Pull ALL published products from Strapi and  
+// upsert them into commerce_inventory with correct IDs.
+// Call this once after deploy to seed correctly.
+// ----------------------------------------------------
+router.post('/admin/sync-from-strapi', async (req, res) => {
+  const STRAPI_URL = process.env.STRAPI_URL || 'https://cms-driven-e-commerce.onrender.com';
+  const STRAPI_TOKEN = process.env.STRAPI_API_TOKEN;
+
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (STRAPI_TOKEN) headers['Authorization'] = `Bearer ${STRAPI_TOKEN}`;
+
+    // Fetch all published products from Strapi
+    const strapiRes = await fetch(
+      `${STRAPI_URL}/api/products?pagination[pageSize]=100&publicationState=live`,
+      { headers }
+    );
+
+    if (!strapiRes.ok) {
+      const text = await strapiRes.text();
+      return res.status(502).json({ error: 'Strapi fetch failed', detail: text });
+    }
+
+    const { data } = await strapiRes.json();
+    if (!data || data.length === 0) {
+      return res.json({ success: true, synced: 0, message: 'No published products found in Strapi' });
+    }
+
+    let synced = 0;
+    const results: any[] = [];
+
+    for (const product of data) {
+      const strapi_id = product.id;
+      const { slug, title, price, stock } = product.attributes;
+
+      await pool.query(`
+        INSERT INTO commerce_inventory (strapi_id, slug, name, price, available_qty, reserved_qty)
+        VALUES ($1, $2, $3, $4, $5, 0)
+        ON CONFLICT (strapi_id) DO UPDATE SET
+          slug = EXCLUDED.slug,
+          name = EXCLUDED.name,
+          price = EXCLUDED.price,
+          available_qty = EXCLUDED.available_qty,
+          updated_at = CURRENT_TIMESTAMP
+      `, [strapi_id, slug, title, price || 0, stock || 0]);
+
+      results.push({ strapi_id, slug, name: title, price, stock });
+      synced++;
+    }
+
+    res.json({ success: true, synced, products: results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ----------------------------------------------------
 // Strapi Product Sync Webhook (Sprint 5 Product Mirror)
 // ----------------------------------------------------
 router.post('/sync/product', async (req, res) => {
@@ -95,9 +165,9 @@ router.post('/sync/product', async (req, res) => {
     const upsertQuery = `
       INSERT INTO commerce_inventory (strapi_id, slug, name, price, available_qty)
       VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (slug) 
+      ON CONFLICT (strapi_id) 
       DO UPDATE SET 
-        strapi_id = EXCLUDED.strapi_id,
+        slug = EXCLUDED.slug,
         name = EXCLUDED.name,
         price = EXCLUDED.price,
         available_qty = EXCLUDED.available_qty,
