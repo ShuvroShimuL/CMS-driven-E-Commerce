@@ -48,12 +48,19 @@
       "type": "enumeration",
       "enum": [
         "pending",
+        "processing",
         "confirmed",
         "shipped",
         "delivered",
         "cancelled"
       ],
       "default": "pending"
+    },
+    "tracking_code": {
+      "type": "string"
+    },
+    "courier_status": {
+      "type": "string"
     }
   }
 }
