@@ -158,7 +158,7 @@ export async function sendOrderCancelledEmail(
          payment was not completed within 24 hours.</p>
       <p>Any reserved stock has been released. You are welcome to place a new order anytime.</p>
       <div style="text-align:center;margin:24px 0">
-        <a href="${FRONTEND_URL}/category/all"
+        <a href="${FRONTEND_URL}/shop"
            style="background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">
           Shop Again
         </a>
@@ -166,3 +166,41 @@ export async function sendOrderCancelledEmail(
     </div>
   `);
 }
+
+// ─── Order Shipped Email ───────────────────────────────────────────────────────
+export async function sendOrderShippedEmail(
+  to: string, name: string, orderId: string, trackingUrl: string, trackingCode: string
+) {
+  await sendSystemEmail(to, name, `🚚 Your Order #${orderId} is on the way!`, `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
+      <h2 style="color:#7c3aed">🚚 It's on its way!</h2>
+      <p>Hi <strong>${name}</strong>, your order <strong>#${orderId}</strong> has been shipped via Steadfast Courier.</p>
+      <p>Your Tracking Code: <strong>${trackingCode}</strong></p>
+      <div style="text-align:center;margin:32px 0">
+        <a href="${trackingUrl}" style="background:#7c3aed;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+          Track Package
+        </a>
+      </div>
+      <p style="color:#666;font-size:13px">You can track your package directly at any time from your account order history.</p>
+    </div>
+  `);
+}
+
+// ─── Order Delivered Email ─────────────────────────────────────────────────────
+export async function sendOrderDeliveredEmail(
+  to: string, name: string, orderId: string
+) {
+  await sendSystemEmail(to, name, `📦 Package Delivered - Order #${orderId}`, `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
+      <h2 style="color:#16a34a">📦 Delivered!</h2>
+      <p>Hi <strong>${name}</strong>, your order <strong>#${orderId}</strong> has been successfully delivered by Steadfast Courier.</p>
+      <p>Thank you for shopping at Premium Store. We hope to see you again soon!</p>
+      <div style="text-align:center;margin:32px 0">
+        <a href="${FRONTEND_URL}/shop" style="background:#7c3aed;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+          Shop Again
+        </a>
+      </div>
+    </div>
+  `);
+}
+
