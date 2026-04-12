@@ -9,7 +9,8 @@ export const userRouter = Router();
 
 const STRAPI_URL  = process.env.STRAPI_URL        || 'https://cms-driven-e-commerce.onrender.com';
 const STRAPI_TOKEN = process.env.STRAPI_API_TOKEN;
-const FRONTEND_URL = process.env.FRONTEND_URL     || 'https://cms-driven-e-commerce.vercel.app';
+// Bypass potentially corrupted FRONTEND_URL env var from user copy/paste
+const FRONTEND_URL = 'https://cms-driven-e-commerce.vercel.app';
 
 function strapiHeaders(): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
