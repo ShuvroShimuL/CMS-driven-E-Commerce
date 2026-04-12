@@ -182,7 +182,6 @@ export async function forgotPassword(formData: FormData) {
 // ─── Reset Password ───────────────────────────────────────────────────────────
 export async function resetPassword(formData: FormData) {
   const data = {
-    email:       formData.get('email')       as string,
     token:       formData.get('token')       as string,
     newPassword: formData.get('newPassword') as string,
   };

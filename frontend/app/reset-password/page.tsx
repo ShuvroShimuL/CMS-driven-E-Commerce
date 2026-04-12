@@ -8,14 +8,13 @@ import styles from '@/styles/auth.module.css';
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
-  const token        = searchParams.get('token') || '';
-  const email        = searchParams.get('email') || '';
+  const token = searchParams.get('token') || '';
 
   const [loading, setLoading] = useState(false);
   const [done, setDone]       = useState(false);
   const [error, setError]     = useState<string | null>(null);
 
-  if (!token || !email) {
+  if (!token) {
     return (
       <div className={styles.card}>
         <div className={styles.logoMark}>PREMIUM.</div>
@@ -37,7 +36,6 @@ function ResetPasswordForm() {
     setLoading(true);
     setError(null);
     formData.set('token', token);
-    formData.set('email', email);
     const result = await resetPassword(formData);
     if (result.success) {
       setDone(true);

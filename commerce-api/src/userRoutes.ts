@@ -359,7 +359,7 @@ userRouter.post('/forgot-password', async (req, res) => {
         [email.toLowerCase(), tokenHash, expiresAt]
       );
 
-      const resetUrl = `${FRONTEND_URL}/reset-password?token=${rawToken}&email=${encodeURIComponent(email.toLowerCase())}`;
+      const resetUrl = `${FRONTEND_URL}/reset-password?token=${rawToken}`;
       await sendPasswordResetEmail(email, resetUrl, rows[0].full_name);
     }
 
@@ -373,32 +373,33 @@ userRouter.post('/forgot-password', async (req, res) => {
 
 // ─── POST /users/reset-password ──────────────────────────────────────────────
 userRouter.post('/reset-password', async (req, res) => {
-  const { email, token, newPassword } = req.body;
-  if (!email || !token || !newPassword)
-    return res.status(400).json({ error: 'email, token and newPassword are required' });
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword)
+    return res.status(400).json({ error: 'token and newPassword are required' });
   if (newPassword.length < 8)
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
 
   const tokenHash = hashToken(token);
   const client = await pool.connect();
   try {
+    // Look up email by token — no need for email in the URL
     const { rows } = await client.query(
-      'SELECT id FROM commerce_password_resets WHERE email = $1 AND token_hash = $2 AND used = false AND expires_at > NOW()',
-      [email.toLowerCase(), tokenHash]
+      'SELECT id, email FROM commerce_password_resets WHERE token_hash = $1 AND used = false AND expires_at > NOW()',
+      [tokenHash]
     );
     if (rows.length === 0)
       return res.status(400).json({ error: 'Reset link is invalid or has expired' });
 
+    const email = rows[0].email;
     const passwordHash = await bcrypt.hash(newPassword, 12);
     const userRes = await client.query(
       'UPDATE commerce_users SET password_hash = $1, updated_at = NOW() WHERE email = $2 RETURNING id',
-      [passwordHash, email.toLowerCase()]
+      [passwordHash, email]
     );
     if (userRes.rows.length === 0)
       return res.status(404).json({ error: 'Account not found' });
 
     await client.query('UPDATE commerce_password_resets SET used = true WHERE id = $1', [rows[0].id]);
-    // Revoke all sessions for security
     await client.query('DELETE FROM commerce_refresh_tokens WHERE user_id = $1', [userRes.rows[0].id]);
 
     res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
