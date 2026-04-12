@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useRef } from 'react';
+import { useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { verifyOTP, resendOTP } from '@/app/actions/auth';
 import styles from '@/styles/auth.module.css';
 
-export default function VerifyOTPPage() {
+function VerifyOTPForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const email        = searchParams.get('email') || '';
@@ -60,60 +60,63 @@ export default function VerifyOTPPage() {
   };
 
   return (
-    <div className={styles.page}>
-      <div className={styles.card}>
-        <div className={styles.logoMark}>PREMIUM.</div>
-        <h1 className={styles.title}>Check your email</h1>
-        <p className={styles.subtitle}>
-          We sent a 6-digit code to <strong>{email || 'your email'}</strong>
-        </p>
+    <div className={styles.card}>
+      <div className={styles.logoMark}>PREMIUM.</div>
+      <h1 className={styles.title}>Check your email</h1>
+      <p className={styles.subtitle}>
+        We sent a 6-digit code to <strong>{email || 'your email'}</strong>
+      </p>
 
-        {error  && <div className={styles.error}>{error}</div>}
-        {resent && <div className={styles.success}>✓ New OTP sent! Check your inbox.</div>}
+      {error  && <div className={styles.error}>{error}</div>}
+      {resent && <div className={styles.success}>✓ New OTP sent! Check your inbox.</div>}
 
-        <div className={styles.infoBox}>
-          Code expires in 10 minutes
+      <div className={styles.infoBox}>Code expires in 10 minutes</div>
+
+      <form className={styles.form} onSubmit={handleSubmit}>
+        <div className={styles.otpGrid}>
+          {otp.map((digit, i) => (
+            <input
+              key={i}
+              ref={(el) => { inputRefs.current[i] = el; }}
+              type="text"
+              inputMode="numeric"
+              maxLength={1}
+              value={digit}
+              onChange={(e) => handleChange(i, e.target.value)}
+              onKeyDown={(e)  => handleKeyDown(i, e)}
+              className={styles.otpInput}
+              autoFocus={i === 0}
+            />
+          ))}
         </div>
 
-        <form className={styles.form} onSubmit={handleSubmit}>
-          <input type="hidden" name="email" value={email} />
-          <input type="hidden" name="otp"   value={otp.join('')} />
+        <button type="submit" className={styles.submitBtn} disabled={loading}>
+          {loading ? 'Verifying…' : 'Verify Email'}
+        </button>
+      </form>
 
-          <div className={styles.otpGrid}>
-            {otp.map((digit, i) => (
-              <input
-                key={i}
-                ref={(el) => { inputRefs.current[i] = el; }}
-                type="text"
-                inputMode="numeric"
-                maxLength={1}
-                value={digit}
-                onChange={(e) => handleChange(i, e.target.value)}
-                onKeyDown={(e)  => handleKeyDown(i, e)}
-                className={styles.otpInput}
-                autoFocus={i === 0}
-              />
-            ))}
-          </div>
+      <hr className={styles.divider} />
+      <p className={styles.footer}>
+        Didn&apos;t receive it?{' '}
+        <button
+          onClick={handleResend}
+          disabled={resending}
+          style={{ background: 'none', border: 'none', cursor: 'pointer',
+                   color: '#7c3aed', fontWeight: 600, fontSize: '0.875rem' }}
+        >
+          {resending ? 'Sending…' : 'Resend OTP'}
+        </button>
+      </p>
+    </div>
+  );
+}
 
-          <button type="submit" className={styles.submitBtn} disabled={loading}>
-            {loading ? 'Verifying…' : 'Verify Email'}
-          </button>
-        </form>
-
-        <hr className={styles.divider} />
-        <p className={styles.footer}>
-          Didn&apos;t receive it?{' '}
-          <button
-            onClick={handleResend}
-            disabled={resending}
-            style={{ background: 'none', border: 'none', cursor: 'pointer',
-                     color: '#7c3aed', fontWeight: 600, fontSize: '0.875rem' }}
-          >
-            {resending ? 'Sending…' : 'Resend OTP'}
-          </button>
-        </p>
-      </div>
+export default function VerifyOTPPage() {
+  return (
+    <div className={styles.page}>
+      <Suspense fallback={<div className={styles.card} style={{textAlign:'center'}}>Loading…</div>}>
+        <VerifyOTPForm />
+      </Suspense>
     </div>
   );
 }
