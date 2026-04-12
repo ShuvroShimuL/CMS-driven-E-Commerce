@@ -37,9 +37,11 @@ export default async function Header() {
         <div className={styles.actions}>
           {authUser ? (
             <>
-              <Link href="/account" className={styles.navLink} style={{ fontSize: '0.875rem' }}>
+              <Link href="/account" className={styles.navLink}
+                style={{ fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 👤 {firstName}
               </Link>
+              <span style={{ color: '#cbd5e1' }}>|</span>
               <Link href="/cart" className={styles.cartBtn}>
                 Cart ({totalQuantity})
               </Link>
