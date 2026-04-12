@@ -55,11 +55,16 @@ userRouter.post('/register', async (req, res) => {
       [email.toLowerCase(), otp, otpExpiry]
     );
 
-    await sendOTPEmail(email, otp, full_name);
+    // Send OTP non-blocking — Gmail failure must NOT fail the registration
+    sendOTPEmail(email, otp, full_name).catch(emailErr =>
+      console.error('[Register] Gmail OTP send failed (non-fatal):', emailErr.message)
+    );
+
     res.json({ success: true, message: 'OTP sent. Please check your email.' });
   } catch (err: any) {
-    console.error('[Register]', err.message);
-    res.status(500).json({ error: 'Registration failed. Please try again.' });
+    // Expose real DB error detail so we can diagnose (table missing, etc.)
+    console.error('[Register] DB error:', err.message);
+    res.status(500).json({ error: 'Registration failed', detail: err.message });
   } finally { client.release(); }
 });
 
