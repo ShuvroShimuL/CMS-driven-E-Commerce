@@ -1,41 +1,31 @@
-// All emails go through Brevo REST API (works from Render — no SMTP ports needed)
-// Gmail SMTP was blocked by Render's firewall.
-
-const BREVO_KEY    = process.env.BREVO_API_KEY    || '';
-const BREVO_SENDER = process.env.BREVO_SENDER_EMAIL || 'shamimrshimul0403@gmail.com';
-const FROM_NAME    = 'Premium Store';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://cms-driven-e-commerce.vercel.app';
+const JWT_SECRET   = process.env.JWT_SECRET   || '';
 
-async function sendBrevoEmail(
-  to: string, toName: string, subject: string, html: string
-): Promise<void> {
-  if (!BREVO_KEY) {
-    console.warn('[Mailer] BREVO_API_KEY not set — skipping email to', to);
+// ─── Proxy mailer through Vercel to bypass Render SMTP blocks ────────────────
+async function sendVercelEmail(to: string, subject: string, htmlContent: string): Promise<void> {
+  if (!JWT_SECRET) {
+    console.warn('[Mailer] JWT_SECRET not set — skipping email to', to);
     return;
   }
-  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+  
+  const res = await fetch(`${FRONTEND_URL}/api/mailer`, {
     method: 'POST',
     headers: {
-      'Accept': 'application/json',
       'Content-Type': 'application/json',
-      'api-key': BREVO_KEY
+      'Authorization': `Bearer ${JWT_SECRET}`
     },
-    body: JSON.stringify({
-      sender: { name: FROM_NAME, email: BREVO_SENDER },
-      to:     [{ email: to, name: toName }],
-      subject,
-      htmlContent: html
-    })
+    body: JSON.stringify({ to, subject, htmlContent })
   });
+
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Brevo API error: ${res.status} ${errText}`);
+    throw new Error(`Vercel Mailer API error: ${res.status} ${errText}`);
   }
 }
 
 // ─── OTP Verification Email ────────────────────────────────────────────────────
 export async function sendOTPEmail(to: string, otp: string, name: string = 'there') {
-  await sendBrevoEmail(to, name, `${otp} — Your Premium Store Verification Code`, `
+  await sendVercelEmail(to, `${otp} — Your Premium Store Verification Code`, `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px">
       <h2 style="color:#7c3aed;margin-bottom:8px">Verify your email</h2>
       <p style="color:#444">Hi <strong>${name}</strong>,</p>
@@ -53,7 +43,7 @@ export async function sendOTPEmail(to: string, otp: string, name: string = 'ther
 
 // ─── Password Reset Email ──────────────────────────────────────────────────────
 export async function sendPasswordResetEmail(to: string, resetUrl: string, name: string = 'there') {
-  await sendBrevoEmail(to, name, 'Reset your Premium Store password', `
+  await sendVercelEmail(to, 'Reset your Premium Store password', `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px">
       <h2 style="color:#7c3aed;margin-bottom:8px">Reset your password</h2>
       <p style="color:#444">Hi <strong>${name}</strong>,</p>
@@ -84,7 +74,7 @@ export async function sendPaymentConfirmedEmail(
   const itemList = items.map((i: any) =>
     `<li>${i.title} × ${i.quantity} — $${(parseFloat(i.price) * i.quantity).toFixed(2)}</li>`
   ).join('');
-  await sendBrevoEmail(to, name, `✅ Payment Confirmed #${orderId} — Premium Store`, `
+  await sendVercelEmail(to, `✅ Payment Confirmed #${orderId} — Premium Store`, `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
       <h2 style="color:#16a34a">✅ Payment Confirmed!</h2>
       <p>Hi <strong>${name}</strong>, your payment for order <strong>#${orderId}</strong> has been received.</p>
@@ -99,7 +89,7 @@ export async function sendPaymentConfirmedEmail(
 export async function sendPaymentFailedEmail(
   to: string, name: string, orderId: string, retryUrl: string
 ) {
-  await sendBrevoEmail(to, name, `❌ Payment Failed #${orderId} — Please Retry`, `
+  await sendVercelEmail(to, `❌ Payment Failed #${orderId} — Please Retry`, `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
       <h2 style="color:#dc2626">❌ Payment Failed</h2>
       <p>Hi <strong>${name}</strong>, unfortunately your payment for order <strong>#${orderId}</strong> was not successful.</p>
@@ -117,7 +107,7 @@ export async function sendPaymentFailedEmail(
 export async function sendOrderCancelledEmail(
   to: string, name: string, orderId: string
 ) {
-  await sendBrevoEmail(to, name, `Order #${orderId} Cancelled — Premium Store`, `
+  await sendVercelEmail(to, `Order #${orderId} Cancelled — Premium Store`, `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
       <h2 style="color:#dc2626">Order Cancelled</h2>
       <p>Hi <strong>${name}</strong>,</p>
