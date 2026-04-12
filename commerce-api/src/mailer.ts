@@ -1,12 +1,36 @@
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://cms-driven-e-commerce.vercel.app';
 const JWT_SECRET   = process.env.JWT_SECRET   || '';
+const BREVO_KEY    = process.env.BREVO_API_KEY || '';
+const BREVO_SENDER = process.env.BREVO_SENDER_EMAIL || 'shamimrshimul0403@gmail.com';
+const FROM_NAME    = 'Premium Store';
 
-// ─── Proxy mailer through Vercel to bypass Render SMTP blocks ────────────────
-async function sendVercelEmail(to: string, subject: string, htmlContent: string): Promise<void> {
-  if (!JWT_SECRET) {
-    console.warn('[Mailer] JWT_SECRET not set — skipping email to', to);
-    return;
+// ─── Brevo Sender ─────────────────────────────────────────────────────────────
+async function sendBrevoEmail(to: string, toName: string, subject: string, html: string): Promise<void> {
+  if (!BREVO_KEY) throw new Error('BREVO_API_KEY not set');
+  
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'api-key': BREVO_KEY
+    },
+    body: JSON.stringify({
+      sender: { name: FROM_NAME, email: BREVO_SENDER },
+      to:     [{ email: to, name: toName }],
+      subject,
+      htmlContent: html
+    })
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Brevo API error: ${res.status} ${errText}`);
   }
+}
+
+// ─── Vercel/Gmail Proxy Sender ───────────────────────────────────────────────
+async function sendVercelEmail(to: string, subject: string, htmlContent: string): Promise<void> {
+  if (!JWT_SECRET) throw new Error('JWT_SECRET not set');
   
   const res = await fetch(`${FRONTEND_URL}/api/mailer`, {
     method: 'POST',
@@ -23,9 +47,26 @@ async function sendVercelEmail(to: string, subject: string, htmlContent: string)
   }
 }
 
+// ─── Auto-Failover Master Sender ──────────────────────────────────────────────
+async function sendSystemEmail(to: string, toName: string, subject: string, htmlContent: string) {
+  try {
+    // 1. Try Brevo First
+    if (BREVO_KEY) {
+      await sendBrevoEmail(to, toName, subject, htmlContent);
+      return; // Success
+    } else {
+      throw new Error('BREVO_KEY not configured');
+    }
+  } catch (err: any) {
+    console.warn(`[Mailer] Brevo preferred sender failed: ${err.message}. Falling back to Gmail proxy...`);
+    // 2. Fallback to Gmail via Vercel Proxy
+    await sendVercelEmail(to, subject, htmlContent);
+  }
+}
+
 // ─── OTP Verification Email ────────────────────────────────────────────────────
 export async function sendOTPEmail(to: string, otp: string, name: string = 'there') {
-  await sendVercelEmail(to, `${otp} — Your Premium Store Verification Code`, `
+  await sendSystemEmail(to, name, `${otp} — Your Premium Store Verification Code`, `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px">
       <h2 style="color:#7c3aed;margin-bottom:8px">Verify your email</h2>
       <p style="color:#444">Hi <strong>${name}</strong>,</p>
@@ -43,7 +84,7 @@ export async function sendOTPEmail(to: string, otp: string, name: string = 'ther
 
 // ─── Password Reset Email ──────────────────────────────────────────────────────
 export async function sendPasswordResetEmail(to: string, resetUrl: string, name: string = 'there') {
-  await sendVercelEmail(to, 'Reset your Premium Store password', `
+  await sendSystemEmail(to, name, 'Reset your Premium Store password', `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px">
       <h2 style="color:#7c3aed;margin-bottom:8px">Reset your password</h2>
       <p style="color:#444">Hi <strong>${name}</strong>,</p>
@@ -74,7 +115,7 @@ export async function sendPaymentConfirmedEmail(
   const itemList = items.map((i: any) =>
     `<li>${i.title} × ${i.quantity} — $${(parseFloat(i.price) * i.quantity).toFixed(2)}</li>`
   ).join('');
-  await sendVercelEmail(to, `✅ Payment Confirmed #${orderId} — Premium Store`, `
+  await sendSystemEmail(to, name, `✅ Payment Confirmed #${orderId} — Premium Store`, `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
       <h2 style="color:#16a34a">✅ Payment Confirmed!</h2>
       <p>Hi <strong>${name}</strong>, your payment for order <strong>#${orderId}</strong> has been received.</p>
@@ -89,7 +130,7 @@ export async function sendPaymentConfirmedEmail(
 export async function sendPaymentFailedEmail(
   to: string, name: string, orderId: string, retryUrl: string
 ) {
-  await sendVercelEmail(to, `❌ Payment Failed #${orderId} — Please Retry`, `
+  await sendSystemEmail(to, name, `❌ Payment Failed #${orderId} — Please Retry`, `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
       <h2 style="color:#dc2626">❌ Payment Failed</h2>
       <p>Hi <strong>${name}</strong>, unfortunately your payment for order <strong>#${orderId}</strong> was not successful.</p>
@@ -107,7 +148,7 @@ export async function sendPaymentFailedEmail(
 export async function sendOrderCancelledEmail(
   to: string, name: string, orderId: string
 ) {
-  await sendVercelEmail(to, `Order #${orderId} Cancelled — Premium Store`, `
+  await sendSystemEmail(to, name, `Order #${orderId} Cancelled — Premium Store`, `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
       <h2 style="color:#dc2626">Order Cancelled</h2>
       <p>Hi <strong>${name}</strong>,</p>
