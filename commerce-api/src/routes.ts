@@ -5,6 +5,75 @@ import { v4 as uuidv4 } from 'uuid';
 const router = Router();
 
 // ----------------------------------------------------
+// Health / Debug: Inspect inventory table
+// ----------------------------------------------------
+router.get('/admin/inventory', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM commerce_inventory ORDER BY strapi_id ASC');
+    res.json({ count: rows.length, inventory: rows });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// Debug: Manually seed / reset a product in inventory
+// POST body: { strapi_id, slug, name, price, stock }
+// ----------------------------------------------------
+router.post('/admin/seed-inventory', async (req, res) => {
+  const { strapi_id, slug, name, price, stock } = req.body;
+  if (!strapi_id || !slug) {
+    return res.status(400).json({ error: 'strapi_id and slug are required' });
+  }
+  try {
+    await pool.query(`
+      INSERT INTO commerce_inventory (strapi_id, slug, name, price, available_qty, reserved_qty)
+      VALUES ($1, $2, $3, $4, $5, 0)
+      ON CONFLICT (slug) DO UPDATE SET
+        strapi_id = EXCLUDED.strapi_id,
+        name = EXCLUDED.name,
+        price = EXCLUDED.price,
+        available_qty = EXCLUDED.available_qty,
+        reserved_qty = 0,
+        updated_at = CURRENT_TIMESTAMP
+    `, [strapi_id, slug, name || slug, price || 0, stock || 100]);
+    res.json({ success: true, message: `Inventory seeded for strapi_id=${strapi_id}, slug=${slug}` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// Debug: Release all stuck PENDING reservations immediately
+// ----------------------------------------------------
+router.post('/admin/release-stuck', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(`
+      SELECT id, cart_items FROM commerce_transactions WHERE status = 'PENDING'
+    `);
+    for (const tx of rows) {
+      for (const item of tx.cart_items) {
+        await client.query(`
+          UPDATE commerce_inventory
+          SET available_qty = available_qty + $2, reserved_qty = GREATEST(reserved_qty - $2, 0)
+          WHERE strapi_id = $1
+        `, [item.id, item.quantity]);
+      }
+      await client.query(`UPDATE commerce_transactions SET status = 'CANCELLED_TIMEOUT' WHERE id = $1`, [tx.id]);
+    }
+    await client.query('COMMIT');
+    res.json({ success: true, released: rows.length });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ----------------------------------------------------
 // Strapi Product Sync Webhook (Sprint 5 Product Mirror)
 // ----------------------------------------------------
 router.post('/sync/product', async (req, res) => {
@@ -157,7 +226,20 @@ router.post('/payments/ipn/sslcommerz', async (req, res) => {
         WHERE transaction_id = $1
       `, [tran_id]);
 
-      // TODO: Here we would trigger the Strapi POST /api/orders to officially record for admin viewing
+      // Fetch the full transaction details to create the Strapi order
+      const { rows: txRows } = await client.query(
+        'SELECT * FROM commerce_transactions WHERE transaction_id = $1',
+        [tran_id]
+      );
+      const fullTx = txRows[0];
+
+      // Create order in Strapi for admin visibility
+      await createStrapiOrder(fullTx, items);
+
+      // Decrement Strapi stock for each sold item
+      for (const item of items) {
+        await decrementStrapiStock(item.id, item.quantity);
+      }
       
     } else {
       // 3. Failed/Cancelled: Release Stock early
@@ -191,4 +273,141 @@ router.post('/payments/ipn/sslcommerz', async (req, res) => {
   }
 });
 
+// =====================================================
+// HELPER: Create a Strapi Order for admin visibility
+// =====================================================
+async function createStrapiOrder(tx: any, items: any[]) {
+  const STRAPI_URL = process.env.STRAPI_URL || 'https://cms-driven-e-commerce.onrender.com';
+  const STRAPI_TOKEN = process.env.STRAPI_API_TOKEN;
+
+  const customer = tx.customer_info || {};
+  const payload = {
+    data: {
+      fullName: customer.fullName || customer.name || 'Customer',
+      email: customer.email || '',
+      phone: customer.phone || '',
+      fullAddress: customer.fullAddress || customer.address || '',
+      division: customer.division || '',
+      district: customer.district || '',
+      thana: customer.thana || '',
+      cartItems: items,
+      totalAmount: parseFloat(tx.total_amount),
+      status: 'confirmed',
+    }
+  };
+
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (STRAPI_TOKEN) headers['Authorization'] = `Bearer ${STRAPI_TOKEN}`;
+
+    const res = await fetch(`${STRAPI_URL}/api/orders`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('[Order] Strapi order creation failed:', text);
+    } else {
+      console.log('[Order] Strapi order created successfully');
+    }
+  } catch (err: any) {
+    console.error('[Order] Could not reach Strapi:', err.message);
+  }
+}
+
+// =====================================================
+// HELPER: Decrement Strapi product stock
+// =====================================================
+async function decrementStrapiStock(strapiId: number, qty: number) {
+  const STRAPI_URL = process.env.STRAPI_URL || 'https://cms-driven-e-commerce.onrender.com';
+  const STRAPI_TOKEN = process.env.STRAPI_API_TOKEN;
+
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (STRAPI_TOKEN) headers['Authorization'] = `Bearer ${STRAPI_TOKEN}`;
+
+    // Fetch current stock first
+    const getRes = await fetch(`${STRAPI_URL}/api/products/${strapiId}`, { headers });
+    if (!getRes.ok) return;
+    const productData = await getRes.json();
+    const currentStock = productData?.data?.attributes?.stock ?? 0;
+    const newStock = Math.max(0, currentStock - qty);
+
+    // Update stock
+    await fetch(`${STRAPI_URL}/api/products/${strapiId}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ data: { stock: newStock } })
+    });
+    console.log(`[Stock] Product ${strapiId} stock: ${currentStock} -> ${newStock}`);
+  } catch (err: any) {
+    console.error('[Stock] Could not update Strapi stock:', err.message);
+  }
+}
+
+// =====================================================
+// COD Confirm endpoint — for use until SSLCommerz is live
+// Simulates a successful payment confirmation
+// =====================================================
+router.post('/payments/confirm-cod', async (req, res) => {
+  const { transaction_id } = req.body;
+  if (!transaction_id) return res.status(400).json({ error: 'transaction_id required' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows } = await client.query(
+      'SELECT * FROM commerce_transactions WHERE transaction_id = $1 FOR UPDATE',
+      [transaction_id]
+    );
+
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    const tx = rows[0];
+    if (tx.status !== 'PENDING') {
+      await client.query('ROLLBACK');
+      return res.status(200).json({ message: 'Already processed', status: tx.status });
+    }
+
+    const items = tx.cart_items;
+
+    // Commit reserved stock (remove reservation, stock already decremented at lock time)
+    for (const item of items) {
+      await client.query(`
+        UPDATE commerce_inventory 
+        SET reserved_qty = GREATEST(reserved_qty - $2, 0)
+        WHERE strapi_id = $1
+      `, [item.id, item.quantity]);
+    }
+
+    await client.query(
+      `UPDATE commerce_transactions SET status = 'PAID' WHERE transaction_id = $1`,
+      [transaction_id]
+    );
+
+    await client.query('COMMIT');
+
+    // Create Strapi order + decrement stock (outside DB transaction, best-effort)
+    await createStrapiOrder(tx, items);
+    for (const item of items) {
+      await decrementStrapiStock(item.id, item.quantity);
+    }
+
+    res.json({ success: true, message: 'COD order confirmed', transaction_id });
+
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 export { router as commerceRoutes };
+

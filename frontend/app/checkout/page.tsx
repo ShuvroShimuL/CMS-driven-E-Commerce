@@ -7,7 +7,7 @@ import styles from './page.module.css';
 
 export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
-  const [successId, setSuccessId] = useState<number | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -18,25 +18,24 @@ export default function CheckoutPage() {
     const formData = new FormData(e.currentTarget);
     const result = await processCheckout(formData);
 
-    if (result.success && result.redirectUrl) {
-      // Sprint 5: SSLCommerz Gateway Redirect
-      window.location.href = result.redirectUrl;
+    if (result.success && result.orderId) {
+      setOrderId(result.orderId as string);
     } else {
       setError(result.error || 'Checkout failed. Please try again.');
     }
     setLoading(false);
   };
 
-  if (successId) {
+  if (orderId) {
     return (
       <div className={styles.container}>
         <div className={styles.successMessage}>
           <div className={styles.successIcon}>🎉</div>
           <h1 style={{ marginBottom: '1rem' }}>Order Confirmed!</h1>
           <p style={{ marginBottom: '2rem', color: 'var(--text-secondary)' }}>
-            Thank you for shopping with us. Your Order ID is <strong>#{successId}</strong>.
+            Thank you for shopping with us. Your Order ID is <strong>#{orderId.slice(0, 8).toUpperCase()}</strong>.
             <br />
-            An email confirmation has been sent to you. You will pay securely via Cash on Delivery.
+            Your order has been placed successfully. You will pay the courier upon delivery.
           </p>
           <Link href="/category/all" className="btn-primary">Continue Shopping</Link>
         </div>

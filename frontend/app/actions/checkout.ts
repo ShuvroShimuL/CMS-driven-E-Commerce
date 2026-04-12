@@ -1,10 +1,9 @@
 'use server'
 
 import { getCart, clearCart } from './cart';
-import { fetchAPI } from '@/lib/api';
 
 /**
- * Handles order creation and Brevo Email sending purely on the server.
+ * Handles order creation: locks inventory, confirms COD, creates Strapi order.
  */
 export async function processCheckout(formData: FormData) {
   try {
@@ -20,10 +19,9 @@ export async function processCheckout(formData: FormData) {
 
     const subtotal = items.reduce((acc: number, item: any) => acc + (parseFloat(item.price) * item.quantity), 0);
 
-    // Refactored for Sprint 5 Commerce Engine API
-    // 1. Fetch to Commerce microservice, locking inventory and getting Gateway URL
     const COMMERCE_API = process.env.COMMERCE_API_URL || 'http://localhost:4000/api/v1';
     
+    // Step 1: Lock inventory in commerce-api (pessimistic lock)
     const initRes = await fetch(`${COMMERCE_API}/payments/sslcommerz/initiate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -38,28 +36,39 @@ export async function processCheckout(formData: FormData) {
       const contentType = initRes.headers.get("content-type");
       if (contentType && contentType.includes("application/json")) {
         const errorData = await initRes.json();
-        throw new Error(errorData.message || "Checkout failed at Gateway level");
+        throw new Error(errorData.message || "Checkout failed — item may be out of stock.");
       } else {
         const textError = await initRes.text();
         console.error("Render HTML Error Dump:", textError);
-        throw new Error("Unable to connect to Commerce API securely. Check Render logs.");
+        throw new Error("Unable to connect to Commerce API. Check Render logs.");
       }
     }
 
-    const { transaction_id, gatewayUrl } = await initRes.json();
+    const { transaction_id } = await initRes.json();
 
-    // In a real SSLCommerz sequence, you DO NOT clear the cart or send Brevo emails here!
-    // They are triggered solely by the Backend /ipn webhook ONLY whenever Payment = VALID!
-    // For Sprint 5 integration testing, we just clear the session cart returning the redirect
+    // Step 2: Confirm as COD (creates Strapi order + decrements stock)
+    const confirmRes = await fetch(`${COMMERCE_API}/payments/confirm-cod`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transaction_id })
+    });
+
+    if (!confirmRes.ok) {
+      const err = await confirmRes.json();
+      throw new Error(err.error || 'Order confirmation failed');
+    }
+
+    // Step 3: Clear the cart — order is confirmed
     await clearCart();
 
-    return { success: true, redirectUrl: gatewayUrl };
+    return { success: true, orderId: transaction_id };
 
   } catch (err: any) {
     console.error("Checkout process failed:", err.message);
     return { success: false, error: err.message };
   }
 }
+
 
 async function sendConfirmationEmail(customerEmail: string, customerName: string, orderId: number, total: number) {
   const BREVO_KEY = process.env.BREVO_API_KEY;
