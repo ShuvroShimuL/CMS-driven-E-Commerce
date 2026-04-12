@@ -1,4 +1,5 @@
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://cms-driven-e-commerce.vercel.app';
+// Bypass potentially corrupted FRONTEND_URL env var from user copy/paste
+const FRONTEND_URL = 'https://cms-driven-e-commerce.vercel.app';
 const JWT_SECRET   = process.env.JWT_SECRET   || '';
 const BREVO_KEY    = process.env.BREVO_API_KEY || '';
 const BREVO_SENDER = process.env.BREVO_SENDER_EMAIL || 'shamimrshimul0403@gmail.com';
@@ -33,19 +34,14 @@ async function sendVercelEmail(to: string, subject: string, htmlContent: string)
   if (!JWT_SECRET) throw new Error('JWT_SECRET not set');
   
   const url = `${FRONTEND_URL}/api/mailer`;
-  let res;
-  try {
-    res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${JWT_SECRET}`
-      },
-      body: JSON.stringify({ to, subject, htmlContent })
-    });
-  } catch (e: any) {
-    throw new Error(`fetch failed to ${url}: ${e.message}`);
-  }
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${JWT_SECRET}`
+    },
+    body: JSON.stringify({ to, subject, htmlContent })
+  });
 
   if (!res.ok) {
     const errText = await res.text();
