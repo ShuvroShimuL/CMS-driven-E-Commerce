@@ -1,14 +1,14 @@
 'use client'
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { processCheckout } from '@/app/actions/checkout';
-import Link from 'next/link';
 import styles from './page.module.css';
 
 export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
-  const [orderId, setOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -19,29 +19,14 @@ export default function CheckoutPage() {
     const result = await processCheckout(formData);
 
     if (result.success && result.orderId) {
-      setOrderId(result.orderId as string);
+      // Hard navigate so the Header Server Component re-renders with cart = 0
+      router.replace(`/order-success?id=${(result.orderId as string).slice(0, 8).toUpperCase()}`);
     } else {
       setError(result.error || 'Checkout failed. Please try again.');
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  if (orderId) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.successMessage}>
-          <div className={styles.successIcon}>🎉</div>
-          <h1 style={{ marginBottom: '1rem' }}>Order Confirmed!</h1>
-          <p style={{ marginBottom: '2rem', color: 'var(--text-secondary)' }}>
-            Thank you for shopping with us. Your Order ID is <strong>#{orderId.slice(0, 8).toUpperCase()}</strong>.
-            <br />
-            Your order has been placed successfully. You will pay the courier upon delivery.
-          </p>
-          <Link href="/category/all" className="btn-primary">Continue Shopping</Link>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className={styles.container}>
