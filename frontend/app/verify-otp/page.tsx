@@ -30,6 +30,18 @@ function VerifyOTPForm() {
       inputRefs.current[idx - 1]?.focus();
   };
 
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const digits = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6).split('');
+    if (digits.length === 0) return;
+    const next = ['', '', '', '', '', ''];
+    digits.forEach((d, i) => { next[i] = d; });
+    setOtp(next);
+    // Focus the box after the last pasted digit (or the last box)
+    const focusIdx = Math.min(digits.length, 5);
+    inputRefs.current[focusIdx]?.focus();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const code = otp.join('');
@@ -84,6 +96,7 @@ function VerifyOTPForm() {
               value={digit}
               onChange={(e) => handleChange(i, e.target.value)}
               onKeyDown={(e)  => handleKeyDown(i, e)}
+              onPaste={handlePaste}
               className={styles.otpInput}
               autoFocus={i === 0}
             />
