@@ -32,14 +32,20 @@ async function sendBrevoEmail(to: string, toName: string, subject: string, html:
 async function sendVercelEmail(to: string, subject: string, htmlContent: string): Promise<void> {
   if (!JWT_SECRET) throw new Error('JWT_SECRET not set');
   
-  const res = await fetch(`${FRONTEND_URL}/api/mailer`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${JWT_SECRET}`
-    },
-    body: JSON.stringify({ to, subject, htmlContent })
-  });
+  const url = `${FRONTEND_URL}/api/mailer`;
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${JWT_SECRET}`
+      },
+      body: JSON.stringify({ to, subject, htmlContent })
+    });
+  } catch (e: any) {
+    throw new Error(`fetch failed to ${url}: ${e.message}`);
+  }
 
   if (!res.ok) {
     const errText = await res.text();
