@@ -186,8 +186,9 @@ router.post('/sync/product', async (req, res) => {
 // Initiate SSLCommerz Checkout & Pessimistic Lock
 // ----------------------------------------------------
 router.post('/payments/sslcommerz/initiate', async (req, res) => {
-  const { items, customer, subtotal } = req.body;
+  const { items, customer, subtotal, shippingCost, totalAmount } = req.body;
   const transaction_id = uuidv4();
+  const finalTotal = totalAmount || subtotal;
 
   let client;
   let lockAcquired = false;
@@ -224,10 +225,13 @@ router.post('/payments/sslcommerz/initiate', async (req, res) => {
     // Set 15 minutes expiry to clear orphan reservations
     const expiresAt = new Date(Date.now() + 15 * 60000); 
     
+    // Inject shippingCost into customer JSON
+    const customerWithShipping = { ...customer, shippingCost };
+
     await client.query(`
       INSERT INTO commerce_transactions (transaction_id, status, total_amount, cart_items, customer_info, expires_at)
       VALUES ($1, 'PENDING', $2, $3, $4, $5)
-    `, [transaction_id, subtotal, JSON.stringify(items), JSON.stringify(customer), expiresAt]);
+    `, [transaction_id, finalTotal, JSON.stringify(items), JSON.stringify(customerWithShipping), expiresAt]);
 
     await client.query('COMMIT');
     

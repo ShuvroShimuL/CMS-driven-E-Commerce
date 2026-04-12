@@ -22,13 +22,19 @@ export async function processCheckout(formData: FormData) {
       (acc: number, item: any) => acc + (parseFloat(item.price) * item.quantity), 0
     );
 
+    // Compute shipping serverside to prevent tampering
+    const district = (rawData.district as string || '').trim().toLowerCase();
+    const isDhaka = district === 'dhaka' || district === 'dhaka city';
+    const shippingCost = isDhaka ? 60 : 120;
+    const totalAmount = subtotal + shippingCost;
+
     const COMMERCE_API = process.env.COMMERCE_API_URL || 'http://localhost:4000/api/v1';
     
     // Step 1: Lock inventory (pessimistic lock)
     const initRes = await fetch(`${COMMERCE_API}/payments/sslcommerz/initiate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items, customer: rawData, subtotal })
+      body: JSON.stringify({ items, customer: rawData, subtotal, shippingCost, totalAmount })
     });
 
     if (!initRes.ok) {

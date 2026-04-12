@@ -177,7 +177,7 @@ export async function sendOrderShippedEmail(
       <p>Hi <strong>${name}</strong>, your order <strong>#${orderId}</strong> has been shipped via Steadfast Courier.</p>
       <p>Your Tracking Code: <strong>${trackingCode}</strong></p>
       <div style="text-align:center;margin:32px 0">
-        <a href="${trackingUrl}" style="background:#7c3aed;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
+        <a href="${FRONTEND_URL}/track?trackingCode=${encodeURIComponent(trackingCode)}" style="background:#7c3aed;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
           Track Package
         </a>
       </div>
