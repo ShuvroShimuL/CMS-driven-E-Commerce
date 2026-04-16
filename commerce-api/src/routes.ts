@@ -187,9 +187,8 @@ router.post('/sync/product', async (req, res) => {
 // Initiate SSLCommerz Checkout & Pessimistic Lock
 // ----------------------------------------------------
 router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) => {
-  const { items, customer, subtotal, shippingCost, totalAmount } = req.body;
+  const { items, customer, subtotal, shippingCost, totalAmount, couponCode } = req.body;
   const transaction_id = uuidv4();
-  const finalTotal = totalAmount || subtotal;
 
   let client;
   let lockAcquired = false;
@@ -200,7 +199,6 @@ router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) =
 
     for (const item of items) {
       // PESSIMISTIC LOCK: SKIP LOCKED
-      // Guarantees high-concurrency safety.
       const lockRes = await client.query(`
         SELECT available_qty FROM commerce_inventory 
         WHERE strapi_id = $1 AND available_qty >= $2 
@@ -211,7 +209,6 @@ router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) =
         throw new Error(`Product ${item.id} is out of stock or currently locked by another checkout.`);
       }
 
-      // Decrement Available, Increment Reserved
       await client.query(`
         UPDATE commerce_inventory 
         SET available_qty = available_qty - $2, 
@@ -222,28 +219,92 @@ router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) =
 
     lockAcquired = true;
 
-    // Record Transaction Session
+    // ── Coupon validation (inside transaction so used_count is atomic) ────────
+    let discountAmount = 0;
+    let appliedCoupon: any = null;
+
+    if (couponCode && couponCode.trim()) {
+      const code = couponCode.trim().toUpperCase();
+      const { rows: couponRows } = await client.query(
+        `SELECT * FROM commerce_coupons WHERE code = $1 FOR UPDATE`,
+        [code]
+      );
+
+      if (couponRows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: `Coupon "${code}" not found` });
+      }
+
+      const coupon = couponRows[0];
+      const baseTotal = totalAmount || subtotal;
+
+      if (!coupon.is_active) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'This coupon is no longer active' });
+      }
+      if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'This coupon has expired' });
+      }
+      if (coupon.usage_limit !== null && coupon.used_count >= coupon.usage_limit) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'This coupon has reached its usage limit' });
+      }
+      if (parseFloat(coupon.min_order_amount) > 0 && baseTotal < parseFloat(coupon.min_order_amount)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: `Minimum order for this coupon is Tk ${coupon.min_order_amount}`
+        });
+      }
+
+      // Calculate discount
+      if (coupon.type === 'percentage') {
+        const raw = (baseTotal * parseFloat(coupon.value)) / 100;
+        discountAmount = coupon.max_discount
+          ? Math.min(raw, parseFloat(coupon.max_discount))
+          : raw;
+      } else {
+        discountAmount = Math.min(parseFloat(coupon.value), baseTotal);
+      }
+      discountAmount = Math.round(discountAmount * 100) / 100;
+
+      // Atomically increment used_count
+      await client.query(
+        `UPDATE commerce_coupons SET used_count = used_count + 1 WHERE id = $1`,
+        [coupon.id]
+      );
+      appliedCoupon = { code: coupon.code, type: coupon.type, value: parseFloat(coupon.value) };
+    }
+
+    // Final total after discount
+    const baseTotal = totalAmount || subtotal;
+    const finalTotal = Math.max(0, baseTotal - discountAmount);
+
     // Set 15 minutes expiry to clear orphan reservations
-    const expiresAt = new Date(Date.now() + 15 * 60000); 
-    
-    // Inject shippingCost into customer JSON
-    const customerWithShipping = { ...customer, shippingCost };
+    const expiresAt = new Date(Date.now() + 15 * 60000);
+
+    const customerWithMeta = { ...customer, shippingCost, coupon: appliedCoupon, discountAmount };
 
     await client.query(`
       INSERT INTO commerce_transactions (transaction_id, status, total_amount, cart_items, customer_info, expires_at)
       VALUES ($1, 'PENDING', $2, $3, $4, $5)
-    `, [transaction_id, finalTotal, JSON.stringify(items), JSON.stringify(customerWithShipping), expiresAt]);
+    `, [transaction_id, finalTotal, JSON.stringify(items), JSON.stringify(customerWithMeta), expiresAt]);
 
     await client.query('COMMIT');
-    
-    // Simulate SSLCommerz Response for Sprint 5 logic
+
+    // Simulate SSLCommerz Response (stub until live credentials)
     const gatewayUrl = `https://sandbox.sslcommerz.com/mock_gateway/${transaction_id}`;
-    
-    res.json({ success: true, transaction_id, gatewayUrl });
+
+    res.json({
+      success: true, transaction_id, gatewayUrl,
+      discountAmount, finalTotal,
+      coupon: appliedCoupon
+    });
 
   } catch (error: any) {
     if (client) await client.query('ROLLBACK');
-    res.status(400).json({ success: false, message: error.message || 'Database connection or locking failed' });
+    res.status(400).json({ success: false, message: error.message || 'Checkout failed' });
   } finally {
     if (client) client.release();
   }

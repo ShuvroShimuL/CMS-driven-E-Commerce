@@ -23,6 +23,7 @@ import { commerceRoutes } from './routes';
 import { userRouter } from './userRoutes';
 import { shippingRouter } from './shippingRoutes';
 import { webhookRouter } from './webhookRoutes';
+import { couponRouter } from './couponRoutes';
 import { cartLimiter } from './middleware';
 import './cron';
 
@@ -39,6 +40,7 @@ app.use('/api/v1', commerceRoutes);
 app.use('/api/v1/users', userRouter);
 app.use('/api/v1/shipping', cartLimiter, shippingRouter);
 app.use('/api/v1/webhooks', webhookRouter);
+app.use('/api/v1/coupons', couponRouter);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'active', service: 'commerce-api', sprint: 8 });

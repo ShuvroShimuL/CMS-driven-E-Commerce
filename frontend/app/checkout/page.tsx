@@ -6,12 +6,22 @@ import { processCheckout } from '@/app/actions/checkout';
 import styles from './page.module.css';
 import { getCart } from '@/app/actions/cart';
 
+const COMMERCE_API = process.env.NEXT_PUBLIC_COMMERCE_API_URL || 'https://cms-driven-e-commerce-api.onrender.com/api/v1';
+
 export default function CheckoutPage() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [district, setDistrict] = useState('');
-  const [shippingCost, setShippingCost] = useState(60); 
-  const [subtotal, setSubtotal] = useState(0);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState<string | null>(null);
+  const [district, setDistrict]         = useState('');
+  const [shippingCost, setShippingCost] = useState(60);
+  const [subtotal, setSubtotal]         = useState(0);
+
+  // Coupon state
+  const [couponCode, setCouponCode]         = useState('');
+  const [couponLoading, setCouponLoading]   = useState(false);
+  const [couponError, setCouponError]       = useState<string | null>(null);
+  const [couponSuccess, setCouponSuccess]   = useState<string | null>(null);
+  const [discountAmount, setDiscountAmount] = useState(0);
+
   const router = useRouter();
 
   // Load subtotal on mount
@@ -25,13 +35,56 @@ export default function CheckoutPage() {
     loadCart();
   }, []);
 
-  // Recalculate shipping when district changes
+  // Recalculate shipping when district changes; also clear coupon discount
   useEffect(() => {
     const d = district.trim().toLowerCase();
     if (d === 'dhaka' || d === 'dhaka city') setShippingCost(60);
     else if (d.length > 0) setShippingCost(120);
     else setShippingCost(60);
+    // Reset coupon when district changes (totals change)
+    if (discountAmount > 0) {
+      setDiscountAmount(0);
+      setCouponSuccess(null);
+      setCouponError('District changed — please re-apply coupon');
+    }
   }, [district]);
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setCouponLoading(true);
+    setCouponError(null);
+    setCouponSuccess(null);
+    setDiscountAmount(0);
+
+    try {
+      const orderTotal = subtotal + shippingCost;
+      const res = await fetch(`${COMMERCE_API}/coupons/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: couponCode.trim(), orderTotal }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setCouponError(json.error || 'Invalid coupon');
+      } else {
+        setDiscountAmount(json.discountAmount);
+        setCouponSuccess(`✓ "${json.coupon.code}" applied — you save Tk ${json.discountAmount.toFixed(2)}!`);
+      }
+    } catch {
+      setCouponError('Could not validate coupon. Please try again.');
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setCouponCode('');
+    setDiscountAmount(0);
+    setCouponSuccess(null);
+    setCouponError(null);
+  };
+
+  const orderTotal = subtotal + shippingCost - discountAmount;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -39,9 +92,10 @@ export default function CheckoutPage() {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
-    formData.set('shippingCost', shippingCost.toString());
-    formData.set('district', district); // Ensure it's passed
-    
+    formData.set('district', district);
+    // Pass coupon code so server action forwards it to commerce-api
+    if (couponCode.trim()) formData.set('couponCode', couponCode.trim().toUpperCase());
+
     const result = await processCheckout(formData);
 
     if (result.success && result.orderId) {
@@ -52,11 +106,10 @@ export default function CheckoutPage() {
     }
   };
 
-
   return (
     <div className={styles.container}>
       <h1 className={styles.title}>Secure Checkout</h1>
-      
+
       {error && <div className={styles.errorBox}>{error}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '32px' }}>
@@ -89,11 +142,11 @@ export default function CheckoutPage() {
 
             <div className={styles.field}>
               <label>District *</label>
-              <input 
-                name="district" 
-                type="text" 
-                required 
-                className={styles.input} 
+              <input
+                name="district"
+                type="text"
+                required
+                className={styles.input}
                 value={district}
                 onChange={(e) => setDistrict(e.target.value)}
                 placeholder="e.g. Dhaka"
@@ -106,33 +159,80 @@ export default function CheckoutPage() {
             </div>
           </div>
 
+          {/* ─── Coupon Field ─── */}
+          <div style={{ margin: '24px 0', padding: '20px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+            <label style={{ display: 'block', marginBottom: '10px', fontWeight: 600, fontSize: '0.9rem' }}>
+              🎟️ Coupon Code
+            </label>
+            {couponSuccess ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.9rem' }}>{couponSuccess}</span>
+                <button type="button" onClick={handleRemoveCoupon}
+                  style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  placeholder="Enter coupon code"
+                  className={styles.input}
+                  style={{ margin: 0, flex: 1, textTransform: 'uppercase' }}
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyCoupon}
+                  disabled={couponLoading || !couponCode.trim()}
+                  style={{
+                    background: '#7c3aed', color: '#fff', border: 'none', borderRadius: '8px',
+                    padding: '0 20px', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
+                    opacity: couponLoading || !couponCode.trim() ? 0.6 : 1
+                  }}
+                >
+                  {couponLoading ? '...' : 'Apply'}
+                </button>
+              </div>
+            )}
+            {couponError && <p style={{ color: '#ef4444', fontSize: '0.8rem', margin: '8px 0 0' }}>{couponError}</p>}
+          </div>
+
           <div className={styles.paymentNotice}>
             🔒 Secure Payment via SSLCommerz (Cards, Mobile Banking, Net Banking)
           </div>
 
-          <button 
-            type="submit" 
-            className={`btn-primary ${styles.submitBtn}`} 
+          <button
+            type="submit"
+            className={`btn-primary ${styles.submitBtn}`}
             disabled={loading}
             style={{ opacity: loading ? 0.7 : 1 }}
           >
-            {loading ? 'Processing Order...' : `Place Order • Tk ${subtotal + shippingCost}`}
+            {loading ? 'Processing Order...' : `Place Order • Tk ${orderTotal.toFixed(2)}`}
           </button>
         </form>
 
+        {/* ─── Order Summary ─── */}
         <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '12px', height: 'fit-content' }}>
           <h3 style={{ marginTop: 0, marginBottom: '24px' }}>Order Summary</h3>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
             <span>Subtotal</span>
-            <span>Tk {subtotal}</span>
+            <span>Tk {subtotal.toFixed(2)}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', color: '#64748b' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', color: '#64748b' }}>
             <span>Shipping ({shippingCost === 60 ? 'Inside Dhaka' : 'Outside Dhaka'})</span>
             <span>Tk {shippingCost}</span>
           </div>
+          {discountAmount > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', color: '#16a34a', fontWeight: 600 }}>
+              <span>Coupon Discount</span>
+              <span>– Tk {discountAmount.toFixed(2)}</span>
+            </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '1.2rem', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
             <span>Total</span>
-            <span>Tk {subtotal + shippingCost}</span>
+            <span>Tk {orderTotal.toFixed(2)}</span>
           </div>
         </div>
       </div>

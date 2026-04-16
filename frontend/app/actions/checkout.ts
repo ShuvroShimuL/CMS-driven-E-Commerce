@@ -28,13 +28,16 @@ export async function processCheckout(formData: FormData) {
     const shippingCost = isDhaka ? 60 : 120;
     const totalAmount = subtotal + shippingCost;
 
+    // Pass coupon code if provided — commerce-api validates and applies it atomically
+    const couponCode = (rawData.couponCode as string || '').trim().toUpperCase() || undefined;
+
     const COMMERCE_API = process.env.COMMERCE_API_URL || 'http://localhost:4000/api/v1';
-    
-    // Step 1: Lock inventory (pessimistic lock)
+
+    // Step 1: Lock inventory (pessimistic lock) + apply coupon
     const initRes = await fetch(`${COMMERCE_API}/payments/sslcommerz/initiate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items, customer: rawData, subtotal, shippingCost, totalAmount })
+      body: JSON.stringify({ items, customer: rawData, subtotal, shippingCost, totalAmount, couponCode })
     });
 
     if (!initRes.ok) {
