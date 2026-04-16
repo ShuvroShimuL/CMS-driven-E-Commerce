@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { pool } from './db';
 import { authMiddleware, signAccessToken, signRefreshToken, verifyRefreshToken, hashToken } from './auth';
 import { sendOTPEmail, sendPasswordResetEmail } from './mailer';
+import { authLimiter, otpLimiter } from './middleware';
 
 export const userRouter = Router();
 
@@ -23,7 +24,7 @@ function generateOTP(): string {
 }
 
 // ─── POST /users/register ─────────────────────────────────────────────────────
-userRouter.post('/register', async (req, res) => {
+userRouter.post('/register', authLimiter, async (req, res) => {
   const { email, password, full_name, phone } = req.body;
   if (!email || !password || !full_name)
     return res.status(400).json({ error: 'email, password and full_name are required' });
@@ -70,7 +71,7 @@ userRouter.post('/register', async (req, res) => {
 });
 
 // ─── POST /users/verify-otp ───────────────────────────────────────────────────
-userRouter.post('/verify-otp', async (req, res) => {
+userRouter.post('/verify-otp', otpLimiter, async (req, res) => {
   const { email, otp } = req.body;
   if (!email || !otp) return res.status(400).json({ error: 'email and otp are required' });
 
@@ -111,7 +112,7 @@ userRouter.post('/verify-otp', async (req, res) => {
 });
 
 // ─── POST /users/resend-otp ───────────────────────────────────────────────────
-userRouter.post('/resend-otp', async (req, res) => {
+userRouter.post('/resend-otp', otpLimiter, async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'email is required' });
 
@@ -137,7 +138,7 @@ userRouter.post('/resend-otp', async (req, res) => {
 });
 
 // ─── POST /users/login ────────────────────────────────────────────────────────
-userRouter.post('/login', async (req, res) => {
+userRouter.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
 
@@ -339,7 +340,7 @@ userRouter.post('/merge-cart', authMiddleware, async (req, res) => {
 });
 
 // ─── POST /users/forgot-password ─────────────────────────────────────────────
-userRouter.post('/forgot-password', async (req, res) => {
+userRouter.post('/forgot-password', otpLimiter, async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'email is required' });
 
@@ -373,7 +374,7 @@ userRouter.post('/forgot-password', async (req, res) => {
 });
 
 // ─── POST /users/reset-password ──────────────────────────────────────────────
-userRouter.post('/reset-password', async (req, res) => {
+userRouter.post('/reset-password', authLimiter, async (req, res) => {
   const { token, newPassword } = req.body;
   if (!token || !newPassword)
     return res.status(400).json({ error: 'token and newPassword are required' });

@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import { pool } from './db';
 import { v4 as uuidv4 } from 'uuid';
+import { adminApiKeyMiddleware, checkoutLimiter } from './middleware';
 
 const router = Router();
 
 // ----------------------------------------------------
 // Health / Debug: Inspect inventory table
 // ----------------------------------------------------
-router.get('/admin/inventory', async (req, res) => {
+router.get('/admin/inventory', adminApiKeyMiddleware, async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM commerce_inventory ORDER BY strapi_id ASC');
     res.json({ count: rows.length, inventory: rows });
@@ -20,7 +21,7 @@ router.get('/admin/inventory', async (req, res) => {
 // Debug: Manually seed / reset a product in inventory
 // POST body: { strapi_id, slug, name, price, stock }
 // ----------------------------------------------------
-router.post('/admin/seed-inventory', async (req, res) => {
+router.post('/admin/seed-inventory', adminApiKeyMiddleware, async (req, res) => {
   const { strapi_id, slug, name, price, stock } = req.body;
   if (!strapi_id || !slug) {
     return res.status(400).json({ error: 'strapi_id and slug are required' });
@@ -46,7 +47,7 @@ router.post('/admin/seed-inventory', async (req, res) => {
 // ----------------------------------------------------
 // Debug: Release all stuck PENDING reservations immediately
 // ----------------------------------------------------
-router.post('/admin/release-stuck', async (req, res) => {
+router.post('/admin/release-stuck', adminApiKeyMiddleware, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -76,7 +77,7 @@ router.post('/admin/release-stuck', async (req, res) => {
 // ----------------------------------------------------
 // Admin: Wipe inventory table (useful before a full re-sync)
 // ----------------------------------------------------
-router.post('/admin/clear-inventory', async (req, res) => {
+router.post('/admin/clear-inventory', adminApiKeyMiddleware, async (req, res) => {
   try {
     await pool.query('TRUNCATE TABLE commerce_inventory RESTART IDENTITY');
     res.json({ success: true, message: 'Inventory table cleared' });
@@ -90,7 +91,7 @@ router.post('/admin/clear-inventory', async (req, res) => {
 // upsert them into commerce_inventory with correct IDs.
 // Call this once after deploy to seed correctly.
 // ----------------------------------------------------
-router.post('/admin/sync-from-strapi', async (req, res) => {
+router.post('/admin/sync-from-strapi', adminApiKeyMiddleware, async (req, res) => {
   const STRAPI_URL = process.env.STRAPI_URL || 'https://cms-driven-e-commerce.onrender.com';
   const STRAPI_TOKEN = process.env.STRAPI_API_TOKEN;
 
@@ -185,7 +186,7 @@ router.post('/sync/product', async (req, res) => {
 // ----------------------------------------------------
 // Initiate SSLCommerz Checkout & Pessimistic Lock
 // ----------------------------------------------------
-router.post('/payments/sslcommerz/initiate', async (req, res) => {
+router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) => {
   const { items, customer, subtotal, shippingCost, totalAmount } = req.body;
   const transaction_id = uuidv4();
   const finalTotal = totalAmount || subtotal;
@@ -425,7 +426,7 @@ async function decrementStrapiStock(strapiId: number, qty: number) {
 // COD Confirm endpoint — for use until SSLCommerz is live
 // Simulates a successful payment confirmation
 // =====================================================
-router.post('/payments/confirm-cod', async (req, res) => {
+router.post('/payments/confirm-cod', checkoutLimiter, async (req, res) => {
   const { transaction_id } = req.body;
   if (!transaction_id) return res.status(400).json({ error: 'transaction_id required' });
 

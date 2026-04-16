@@ -23,6 +23,7 @@ import { commerceRoutes } from './routes';
 import { userRouter } from './userRoutes';
 import { shippingRouter } from './shippingRoutes';
 import { webhookRouter } from './webhookRoutes';
+import { cartLimiter } from './middleware';
 import './cron';
 
 dotenv.config();
@@ -36,11 +37,11 @@ app.use(express.json());
 // Main Microservice Gateway
 app.use('/api/v1', commerceRoutes);
 app.use('/api/v1/users', userRouter);
-app.use('/api/v1/shipping', shippingRouter);
+app.use('/api/v1/shipping', cartLimiter, shippingRouter);
 app.use('/api/v1/webhooks', webhookRouter);
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'active', service: 'commerce-api', sprint: 6 });
+  res.json({ status: 'active', service: 'commerce-api', sprint: 8 });
 });
 
 app.listen(port, () => {
