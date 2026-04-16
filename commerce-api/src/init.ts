@@ -1,6 +1,8 @@
 import { pool } from './db';
 
-async function initializeDatabase() {
+// ─── Exported migration function — safe to call on every server start ─────────
+// Uses CREATE TABLE IF NOT EXISTS throughout, so re-running is always idempotent.
+export async function runMigrations() {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -100,7 +102,7 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_commerce_coupons_code ON commerce_coupons (code)
     `);
 
-    // ── Sprint 8: Dead-Letter Queue (failed webhook events) ───────────────────
+    // ── Sprint 8: Dead-Letter Queue ───────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS commerce_dlq (
         id BIGSERIAL PRIMARY KEY,
@@ -115,14 +117,24 @@ async function initializeDatabase() {
     `);
 
     await client.query('COMMIT');
-    console.log('✅ Commerce Engine DB Tables Initialized Successfully!');
+    console.log('✅ [Migrations] All tables up to date');
   } catch (e) {
     await client.query('ROLLBACK');
-    console.error('❌ Migration failed:', e);
+    console.error('❌ [Migrations] Failed:', e);
+    throw e;
   } finally {
     client.release();
-    pool.end();
   }
 }
 
-initializeDatabase();
+// ─── Standalone runner (npm run init-db) ─────────────────────────────────────
+async function main() {
+  await runMigrations();
+  await pool.end();
+  console.log('✅ Commerce Engine DB Tables Initialized Successfully!');
+}
+
+main().catch((e) => {
+  console.error('❌ Migration failed:', e);
+  process.exit(1);
+});

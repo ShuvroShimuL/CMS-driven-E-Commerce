@@ -25,6 +25,7 @@ import { shippingRouter } from './shippingRoutes';
 import { webhookRouter } from './webhookRoutes';
 import { couponRouter } from './couponRoutes';
 import { cartLimiter } from './middleware';
+import { runMigrations } from './init';
 import './cron';
 
 dotenv.config();
@@ -46,6 +47,12 @@ app.get('/health', (req, res) => {
   res.json({ status: 'active', service: 'commerce-api', sprint: 8 });
 });
 
-app.listen(port, () => {
-  console.log(`Commerce API active on port ${port}`);
+// Auto-migrate on every startup — idempotent (IF NOT EXISTS), safe to re-run
+runMigrations().then(() => {
+  app.listen(port, () => {
+    console.log(`Commerce API active on port ${port}`);
+  });
+}).catch((err) => {
+  console.error('Fatal: DB migration failed on startup:', err);
+  process.exit(1);
 });
