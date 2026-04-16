@@ -61,27 +61,27 @@ function pass(res, name) {
 }
 
 // ─── Main virtual user flow ───────────────────────────────────────────────────
+// NOTE: Product pages hit Vercel (CDN/ISR cache) — NOT Strapi directly.
+// Real users never call Strapi's API directly; the Next.js frontend fetches
+// at build/revalidation time and serves cached HTML from Vercel's edge.
+// Only commerce-api endpoints (auth, shipping, coupons, checkout) are live DB hits.
 export default function () {
-  // 1. Health check (baseline)
+  // 1. Health check — commerce-api baseline
   const health = http.get(`${COMMERCE_URL.replace('/api/v1', '')}/health`);
   pass(health, 'health');
   sleep(0.2);
 
-  // 2. Strapi product listing (most common user action)
-  const products = http.get(
-    `${STRAPI_URL}/api/products?pagination[pageSize]=12&publicationState=live`
-  );
-  pass(products, 'product_listing');
+  // 2. Product listing page — served from Vercel CDN (ISR cached, not Strapi live)
+  const listing = http.get(`${FRONTEND_URL}/shop`);
+  pass(listing, 'product_listing_cdn');
   sleep(0.3);
 
-  // 3. Single product detail
-  const detail = http.get(
-    `${STRAPI_URL}/api/products?filters[slug][$eq]=product-1&populate=*`
-  );
-  pass(detail, 'product_detail');
+  // 3. Product detail page — also Vercel CDN/ISR cached
+  const detail = http.get(`${FRONTEND_URL}/product/product-1`);
+  pass(detail, 'product_detail_cdn');
   sleep(0.2);
 
-  // 4. Shipping rate calculation
+  // 4. Shipping rate calculation — live commerce-api hit
   const shipping = http.post(
     `${COMMERCE_URL}/shipping/rates`,
     JSON.stringify({ district: 'Dhaka' }),
@@ -90,20 +90,18 @@ export default function () {
   pass(shipping, 'shipping_rates');
   sleep(0.2);
 
-  // 5. Coupon validate (real DB hit, but no mutation)
+  // 5. Coupon validate — live commerce-api DB read
   const coupon = http.post(
     `${COMMERCE_URL}/coupons/validate`,
     JSON.stringify({ code: 'WELCOME10', orderTotal: 1000 }),
     { headers: JSON_HEADERS }
   );
-  // 404 is expected if coupon doesn't exist — not an error for load test purposes
   check(coupon, { 'coupon: not server error': (r) => r.status !== 500 });
   errorRate.add(coupon.status === 500);
   sleep(0.2);
 
-  // 6. Checkout initiate — heavy path (DB lock + coupon logic)
-  // Uses a dummy product strapi_id — will fail with 400 (out of stock) which is expected
-  // We're testing throughput and error rate, not business logic here
+  // 6. Checkout initiate — heaviest path: DB lock + coupon validation
+  // Expects 400 (test product not in inventory) — 5xx would be a real failure
   const checkoutStart = Date.now();
   const checkout = http.post(
     `${COMMERCE_URL}/payments/sslcommerz/initiate`,
@@ -125,7 +123,6 @@ export default function () {
     { headers: JSON_HEADERS }
   );
   checkoutP95.add(Date.now() - checkoutStart);
-  // 400 is expected (test product doesn't exist in inventory) — 500 would be a real failure
   check(checkout, { 'checkout: not server 5xx': (r) => r.status < 500 });
   errorRate.add(checkout.status >= 500);
 
