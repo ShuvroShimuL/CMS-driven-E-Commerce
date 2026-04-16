@@ -128,13 +128,16 @@ export async function runMigrations() {
 }
 
 // ─── Standalone runner (npm run init-db) ─────────────────────────────────────
+// Only runs when this file is executed directly — NOT when imported by server.ts
 async function main() {
   await runMigrations();
   await pool.end();
   console.log('✅ Commerce Engine DB Tables Initialized Successfully!');
 }
 
-main().catch((e) => {
-  console.error('❌ Migration failed:', e);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((e) => {
+    console.error('❌ Migration failed:', e);
+    process.exit(1);
+  });
+}
