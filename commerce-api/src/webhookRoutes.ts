@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { sendOrderShippedEmail } from './mailer';
+import { writeToDLQ } from './dlq';
 
 export const webhookRouter = Router();
 
@@ -18,13 +19,16 @@ function strapiHeaders(): Record<string, string> {
 }
 
 // ─── POST /webhooks/strapi ───────────────────────────────────────────────────
-// Listens for Strapi "commerce-order" updates
+// Listens for Strapi "commerce-order" updates.
+// DLQ failure scenarios:
+//   1. steadfast_parcel — Steadfast API returned non-OK or missing tracking_code
+//   2. strapi_order_patch — writing tracking_code back to Strapi failed
 webhookRouter.post('/strapi', async (req, res) => {
   try {
     const { event, model, entry } = req.body;
 
     if (model !== 'commerce-order' || !entry) {
-       // Return 200 so Strapi doesn't retry irrevelant webhooks
+       // Return 200 so Strapi doesn't retry irrelevant webhooks
        return res.json({ success: true, message: 'Ignored: not a commerce-order' });
     }
 
@@ -32,13 +36,13 @@ webhookRouter.post('/strapi', async (req, res) => {
        // Check if status just changed to 'processing' and we don't have a tracking code yet
        if (entry.status === 'processing' && !entry.tracking_code) {
           
-          let trackingCode = null;
+          let trackingCode: string | null = null;
 
-          // 1. Send data to Steadfast/Packzy Courier API
+          // ── 1. Send data to Steadfast/Packzy Courier API ──────────────────
           if (STEADFAST_API_KEY && STEADFAST_SECRET_KEY) {
             console.log('[Webhook] Attempting to create parcel in Steadfast/Packzy for Order ID:', entry.id);
             
-            const payload = {
+            const sfPayload = {
               invoice: entry.id.toString(),
               recipient_name: entry.customer_name || 'Customer',
               recipient_phone: entry.phone || '00000000000',
@@ -47,44 +51,85 @@ webhookRouter.post('/strapi', async (req, res) => {
               note: `Order ${entry.id}`
             };
 
-            const sfRes = await fetch(`${STEADFAST_BASE_URL}/create_order`, {
-              method: 'POST',
-              headers: {
-                'Api-Key': STEADFAST_API_KEY,
-                'Secret-Key': STEADFAST_SECRET_KEY,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(payload)
-            });
+            try {
+              const sfRes = await fetch(`${STEADFAST_BASE_URL}/create_order`, {
+                method: 'POST',
+                headers: {
+                  'Api-Key': STEADFAST_API_KEY,
+                  'Secret-Key': STEADFAST_SECRET_KEY,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(sfPayload)
+              });
 
-            const sfData = await sfRes.json();
-            
-            if (sfRes.ok && sfData.consignment?.tracking_code) {
-               trackingCode = sfData.consignment.tracking_code;
-               console.log('[Webhook] Steadfast parcel created. Tracking Code:', trackingCode);
-            } else {
-               console.error('[Webhook] Steadfast API failed:', sfData);
+              const sfData = await sfRes.json();
+              
+              if (sfRes.ok && sfData.consignment?.tracking_code) {
+                trackingCode = sfData.consignment.tracking_code;
+                console.log('[Webhook] Steadfast parcel created. Tracking Code:', trackingCode);
+              } else {
+                // ── DLQ Scenario 1: Steadfast API rejected or returned no tracking code ──
+                const errMsg = `Steadfast API error: ${JSON.stringify(sfData)}`;
+                console.error('[Webhook]', errMsg);
+                await writeToDLQ('steadfast_parcel', {
+                  order_id: entry.id,
+                  order_status: entry.status,
+                  payload: sfPayload,
+                  steadfast_response: sfData,
+                }, errMsg);
+              }
+            } catch (sfErr: any) {
+              // ── DLQ Scenario 1b: Network error reaching Steadfast ─────────────────────
+              const errMsg = `Steadfast fetch exception: ${sfErr.message}`;
+              console.error('[Webhook]', errMsg);
+              await writeToDLQ('steadfast_parcel', {
+                order_id: entry.id,
+                order_status: entry.status,
+                payload: sfPayload,
+              }, errMsg);
             }
           } else {
             console.warn('[Webhook] Steadfast API keys not configured. Skipping courier creation.');
           }
 
-          // 2. Update Strapi Order with the tracking code (if obtained)
-          // We also trigger the email whether we have a code or not, so the user knows it's shipped.
+          // ── 2. Update Strapi Order with the tracking code (if obtained) ───
           if (trackingCode) {
-            await fetch(`${STRAPI_URL}/api/commerce-orders/${entry.id}`, {
-              method: 'PUT',
-              headers: strapiHeaders(),
-              body: JSON.stringify({
-                data: {
+            try {
+              const patchRes = await fetch(`${STRAPI_URL}/api/commerce-orders/${entry.id}`, {
+                method: 'PUT',
+                headers: strapiHeaders(),
+                body: JSON.stringify({
+                  data: {
+                    tracking_code: trackingCode,
+                    courier_status: 'Parcel Created'
+                  }
+                })
+              });
+
+              if (!patchRes.ok) {
+                const patchBody = await patchRes.text();
+                // ── DLQ Scenario 2: Strapi patch failed — tracking code obtained but not saved ──
+                const errMsg = `Strapi order PATCH failed (${patchRes.status}): ${patchBody}`;
+                console.error('[Webhook]', errMsg);
+                await writeToDLQ('strapi_order_patch', {
+                  order_id: entry.id,
                   tracking_code: trackingCode,
-                  courier_status: 'Parcel Created'
-                }
-              })
-            });
+                  courier_status: 'Parcel Created',
+                }, errMsg);
+              }
+            } catch (patchErr: any) {
+              // ── DLQ Scenario 2b: Network error reaching Strapi for patch ─────────────────
+              const errMsg = `Strapi order PATCH exception: ${patchErr.message}`;
+              console.error('[Webhook]', errMsg);
+              await writeToDLQ('strapi_order_patch', {
+                order_id: entry.id,
+                tracking_code: trackingCode,
+              }, errMsg);
+            }
           }
 
-          // 3. Send Order Shipped Email
+          // ── 3. Send Order Shipped Email ────────────────────────────────────
+          // Sent regardless of courier success — customer still needs shipping notice
           const codeToEmail = trackingCode || 'PENDING';
           const trackingLink = `${FRONTEND_URL}/track?orderId=${entry.id}`;
           

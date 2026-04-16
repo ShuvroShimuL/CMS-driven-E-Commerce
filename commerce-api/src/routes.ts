@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool } from './db';
 import { v4 as uuidv4 } from 'uuid';
 import { adminApiKeyMiddleware, checkoutLimiter } from './middleware';
+import { writeToDLQ } from './dlq';
 
 const router = Router();
 
@@ -177,9 +178,12 @@ router.post('/sync/product', async (req, res) => {
     
     await pool.query(upsertQuery, [strapi_id, slug, title, price, stock || 0]);
     res.json({ success: true, action: 'upserted' });
-  } catch (error) {
-    console.error('Webhook sync failed:', error);
-    res.status(500).json({ message: 'Database sync failure' });
+  } catch (error: any) {
+    console.error('[ProductSync] Webhook upsert failed — writing to DLQ:', error.message);
+    // ── DLQ: persist the failed event so it can be retried manually ───────────
+    await writeToDLQ('product_sync', { event, model, entry }, error.message);
+    // Respond 200 so Strapi doesn't retry the webhook in a tight loop
+    res.status(200).json({ success: false, queued: true, message: 'Sync failed — event queued in DLQ' });
   }
 });
 
