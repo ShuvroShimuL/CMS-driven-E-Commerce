@@ -4,46 +4,63 @@
   position: sticky;
   top: 0;
   z-index: 100;
+  backdrop-filter: blur(12px);
+  background-color: rgba(10, 10, 10, 0.9);
 }
 
 .headerContainer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 80px;
+  height: 64px;
 }
 
 .logo {
-  font-size: 1.5rem;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.5px;
+  text-transform: uppercase;
 }
 
 .nav {
   display: flex;
-  gap: 2rem;
+  gap: 2.5rem;
 }
 
 .navLink {
   color: var(--text-secondary);
   font-weight: 500;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   transition: var(--transition);
 }
 
 .navLink:hover {
-  color: var(--accent-color);
+  color: var(--text-primary);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
 }
 
 .cartBtn {
   font-weight: 600;
+  font-size: 0.8rem;
   color: var(--text-primary);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .cartBtn:hover {
-  color: var(--accent-color);
+  color: var(--text-secondary);
 }
 
+/* Profile Dropdown */
 .profileMenu {
   position: relative;
   display: flex;
@@ -55,17 +72,15 @@
   top: 100%;
   right: 0;
   margin-top: 0.5rem;
-  background: white;
+  background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   padding: 0.5rem;
   display: flex;
   flex-direction: column;
-  min-width: 150px;
+  min-width: 160px;
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-10px);
+  transform: translateY(-8px);
   transition: all 0.2s ease;
 }
 
@@ -76,11 +91,10 @@
 }
 
 .dropdownItem {
-  padding: 0.5rem 1rem;
-  color: var(--text-primary);
+  padding: 0.6rem 1rem;
+  color: var(--text-secondary);
   text-decoration: none;
-  border-radius: 4px;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   text-align: left;
   background: none;
   border: none;
@@ -88,17 +102,15 @@
   width: 100%;
   font-family: inherit;
   font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: var(--transition);
 }
 
 .dropdownItem:hover {
-  background: var(--bg-secondary);
-  color: var(--accent-color);
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.05);
 }
 
-.logoutBtn {
-  color: #ef4444;
-}
-.logoutBtn:hover {
-  background: #fef2f2;
-  color: #dc2626;
-}
+.logoutBtn { color: #ef4444; }
+.logoutBtn:hover { background: rgba(239, 68, 68, 0.1); color: #f87171; }

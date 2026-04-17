@@ -39,8 +39,8 @@ export default async function Header() {
           {authUser ? (
             <>
               <div className={styles.profileMenu}>
-                <button className={styles.navLink} style={{ fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer', paddingBottom: '16px', marginBottom: '-16px' }}>
-                  👤 {firstName} ▾
+                <button className={styles.navLink} style={{ display: 'flex', alignItems: 'center', gap: '4px', paddingBottom: '16px', marginBottom: '-16px' }}>
+                  {firstName} ▾
                 </button>
                 <div className={styles.profileDropdown}>
                   <Link href="/account" className={styles.dropdownItem}>My Account</Link>
@@ -49,17 +49,16 @@ export default async function Header() {
                   </form>
                 </div>
               </div>
-              <span style={{ color: '#cbd5e1' }}>|</span>
+              <span style={{ color: 'var(--text-tertiary)' }}>|</span>
               <Link href="/cart" className={styles.cartBtn}>
                 Cart ({totalQuantity})
               </Link>
             </>
           ) : (
             <>
-              <Link href="/login"    className={styles.navLink} style={{ fontSize: '0.875rem' }}>Sign In</Link>
+              <Link href="/login"    className={styles.navLink}>Sign In</Link>
               <Link href="/register" className={styles.navLink}
-                style={{ fontSize: '0.875rem', background: '#7c3aed', color: '#fff',
-                          padding: '6px 14px', borderRadius: '6px' }}>
+                style={{ border: '1px solid var(--text-primary)', padding: '6px 14px' }}>
                 Register
               </Link>
               <Link href="/cart" className={styles.cartBtn}>Cart ({totalQuantity})</Link>

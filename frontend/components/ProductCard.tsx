@@ -16,7 +16,7 @@ export default function ProductCard({ product }: { product: any }) {
         <h3 className={styles.title}>{title}</h3>
         <div className={styles.footer}>
           <span className={styles.price}>Tk {parseFloat(price).toFixed(2)}</span>
-          <span style={{ color: 'var(--accent-color)', fontWeight: 600, fontSize: '0.875rem' }}>View Details &rarr;</span>
+          <span style={{ color: 'var(--text-tertiary)', fontWeight: 600, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px' }}>View →</span>
         </div>
       </div>
     </Link>
