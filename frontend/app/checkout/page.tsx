@@ -318,11 +318,11 @@ export default function CheckoutPage() {
                   <input
                     type="text"
                     value={bkashTxnId}
-                    onChange={(e) => setBkashTxnId(e.target.value.toUpperCase())}
-                    placeholder="e.g. TRX1234ABCD"
+                    onChange={(e) => setBkashTxnId(e.target.value)}
+                    placeholder="e.g. Trx1234Abcd"
                     required={paymentMethod === 'bkash'}
                     className={styles.input}
-                    style={{ margin: 0, textTransform: 'uppercase', borderColor: '#f9a8d4' }}
+                    style={{ margin: 0, borderColor: '#f9a8d4' }}
                   />
                   <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>
                     Find this in your bKash app → Transaction History

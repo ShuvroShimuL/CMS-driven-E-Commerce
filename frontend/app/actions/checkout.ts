@@ -84,10 +84,12 @@ export async function processCheckout(formData: FormData) {
     const customerName = rawData.fullName as string || 'Customer';
     const customerEmail = rawData.email as string || '';
 
-    // Step 4: Send emails (non-blocking)
+    // Step 4: Send emails (awaited to prevent Serverless execution from freezing)
     const paymentLabel = paymentMethod === 'bkash' ? 'bKash' : 'Cash on Delivery';
-    sendCustomerEmail(customerEmail, customerName, shortId, items, subtotal, rawData, paymentLabel, bkashTxnId);
-    sendAdminEmail(customerName, customerEmail, shortId, items, subtotal, rawData, paymentLabel, bkashTxnId);
+    await Promise.allSettled([
+      sendCustomerEmail(customerEmail, customerName, shortId, items, subtotal, rawData, paymentLabel, bkashTxnId),
+      sendAdminEmail(customerName, customerEmail, shortId, items, subtotal, rawData, paymentLabel, bkashTxnId)
+    ]);
 
     return { success: true, orderId: transaction_id };
 
