@@ -4,10 +4,12 @@ import styles from '../checkout/page.module.css';
 export default function OrderSuccessPage({
   searchParams,
 }: {
-  searchParams: { id?: string; method?: string };
+  searchParams: { id?: string; method?: string; coupon?: string; saved?: string };
 }) {
   const orderId = searchParams.id || 'UNKNOWN';
   const isBkash = searchParams.method === 'bkash';
+  const couponCode = searchParams.coupon;
+  const savedAmount = searchParams.saved ? parseFloat(searchParams.saved) : 0;
 
   return (
     <div className={styles.container}>
@@ -20,6 +22,23 @@ export default function OrderSuccessPage({
           Thank you for shopping with us. Your Order ID is{' '}
           <strong>#{orderId}</strong>.
         </p>
+
+        {/* Coupon savings banner */}
+        {couponCode && savedAmount > 0 && (
+          <div style={{
+            background: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: '10px',
+            padding: '12px 20px',
+            marginBottom: '1.5rem',
+            maxWidth: '420px',
+            margin: '0 auto 1.5rem',
+          }}>
+            <p style={{ fontWeight: 600, color: '#16a34a', fontSize: '0.95rem' }}>
+              🎟️ Coupon "{couponCode}" applied — you saved Tk {savedAmount.toFixed(2)}!
+            </p>
+          </div>
+        )}
 
         {isBkash ? (
           <div style={{

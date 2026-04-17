@@ -203,3 +203,33 @@ couponRouter.patch('/admin/dlq/:id/resolve', adminApiKeyMiddleware, async (req, 
     res.status(500).json({ error: err.message });
   }
 });
+
+// ─── GET /coupons/admin/stats ─────────────────────────────────────────────────
+// Admin: Coupon usage stats — how many times each coupon was used
+couponRouter.get('/admin/stats', adminApiKeyMiddleware, async (req, res) => {
+  try {
+    const { rows: coupons } = await pool.query(`
+      SELECT code, type, value, used_count, usage_limit, is_active,
+             CASE WHEN type = 'percentage' THEN 'percentage' ELSE 'fixed' END AS discount_type
+      FROM commerce_coupons
+      ORDER BY used_count DESC
+    `);
+
+    const totalRedemptions = coupons.reduce((sum: number, c: any) => sum + c.used_count, 0);
+
+    res.json({
+      success: true,
+      totalRedemptions,
+      coupons: coupons.map((c: any) => ({
+        code: c.code,
+        type: c.type,
+        value: parseFloat(c.value),
+        used_count: c.used_count,
+        usage_limit: c.usage_limit,
+        is_active: c.is_active,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});

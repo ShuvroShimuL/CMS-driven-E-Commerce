@@ -109,7 +109,10 @@ export default function CheckoutPage() {
     const result = await processCheckout(formData);
 
     if (result.success && result.orderId) {
-      router.replace(`/order-success?id=${(result.orderId as string).slice(0, 8).toUpperCase()}&method=${paymentMethod}`);
+      let successUrl = `/order-success?id=${(result.orderId as string).slice(0, 8).toUpperCase()}&method=${paymentMethod}`;
+      if (discountAmount > 0) successUrl += `&coupon=${couponCode.trim().toUpperCase()}&saved=${discountAmount.toFixed(2)}`;
+      router.replace(successUrl);
+
     } else {
       setError(result.error || 'Checkout failed. Please try again.');
       setLoading(false);
