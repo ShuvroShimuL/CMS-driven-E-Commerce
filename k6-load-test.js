@@ -1,21 +1,16 @@
 /**
  * k6 Load Test — Sprint 8
- * Target: 1,000 concurrent users, <1% error rate
  *
- * Scenarios tested:
- *   1. Homepage (product listing) — heaviest read traffic
- *   2. Product detail page
- *   3. Shipping rate calculation — cart flow
- *   4. Auth endpoints (login, register) — rate limiter tolerance check
- *   5. Coupon validation — real DB hit
- *   6. Health endpoint — baseline
+ * Two profiles selectable via K6_PROFILE env var:
  *
- * Run:
- *   k6 run k6-load-test.js
+ *   BASELINE (default) — 50 VUs, matches free-tier Render capacity
+ *     k6 run k6-load-test.js
+ *
+ *   FULL — 1,000 VUs, requires paid Render tier (dedicated CPU + horizontal scaling)
+ *     K6_PROFILE=full k6 run k6-load-test.js
  *
  * Install k6 (Windows):
  *   winget install k6 --source winget
- *   OR: https://dl.k6.io/msi/k6-latest-amd64.msi
  */
 
 import http from 'k6/http';
@@ -31,21 +26,33 @@ const STRAPI_URL      = 'https://cms-driven-e-commerce.onrender.com';
 const errorRate   = new Rate('errors');
 const checkoutP95 = new Trend('checkout_response_ms', true);
 
-// ─── Load profile: ramp up to 1000 VUs over 2 min, hold 3 min, ramp down ─────
+// ─── Load profiles ────────────────────────────────────────────────────────────
+// BASELINE: free-tier capacity (~50 concurrent connections before Render closes them)
+const BASELINE_STAGES = [
+  { duration: '30s', target: 20  },
+  { duration: '1m',  target: 50  },
+  { duration: '2m',  target: 50  },
+  { duration: '30s', target: 0   },
+];
+
+// FULL: production target — requires paid Render instance (dedicated CPU, auto-scaling)
+const FULL_STAGES = [
+  { duration: '1m',  target: 200  },
+  { duration: '1m',  target: 1000 },
+  { duration: '3m',  target: 1000 },
+  { duration: '1m',  target: 0    },
+];
+
+const isFull   = __ENV.K6_PROFILE === 'full';
+const stages   = isFull ? FULL_STAGES : BASELINE_STAGES;
+const p95limit = isFull ? 2000 : 3000;   // free tier gets a looser latency budget
+
 export const options = {
-  stages: [
-    { duration: '1m',  target: 200  },   // warm-up
-    { duration: '1m',  target: 1000 },   // ramp to 1,000 concurrent users
-    { duration: '3m',  target: 1000 },   // hold at 1,000
-    { duration: '1m',  target: 0    },   // ramp down
-  ],
+  stages,
   thresholds: {
-    // <1% error rate across all requests
-    'errors':                    ['rate<0.01'],
-    // 95th percentile response time <2s
-    'http_req_duration':         ['p(95)<2000'],
-    // checkout endpoint p95 <3s (heavier DB work)
-    'checkout_response_ms':      ['p(95)<3000'],
+    'errors':               [`rate<0.01`],
+    'http_req_duration':    [`p(95)<${p95limit}`],
+    'checkout_response_ms': [`p(95)<${p95limit + 1000}`],
   },
 };
 
