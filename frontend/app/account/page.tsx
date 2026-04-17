@@ -55,7 +55,7 @@ export default async function AccountPage() {
           {orders.length === 0 ? (
             <div style={{ padding: '48px', textAlign: 'center', color: '#64748b' }}>
               <p>You haven't placed any orders yet.</p>
-              <Link href="/shop" style={{ color: '#7c3aed', fontWeight: 'bold' }}>Start shopping</Link>
+              <Link href="/category/all" style={{ color: '#7c3aed', fontWeight: 'bold' }}>Start shopping</Link>
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
