@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SmoothScroll from "@/components/SmoothScroll";
 
 const SITE_NAME = 'Premium Store';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://cms-driven-e-commerce.vercel.app';
@@ -51,11 +52,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <div className="layout-wrapper">
-          <Header />
-          <main className="layout-main">{children}</main>
-          <Footer />
-        </div>
+        <SmoothScroll>
+          <div className="layout-wrapper">
+            <Header />
+            <main className="layout-main">{children}</main>
+            <Footer />
+          </div>
+        </SmoothScroll>
       </body>
     </html>
   );
