@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { getProducts } from '@/lib/api';
 import ProductCard from '@/components/ProductCard';
-import FluidGradientCanvas from '@/components/FluidGradientCanvas';
+import HeroCanvas from '@/components/HeroCanvas';
 import ScrollReveal from '@/components/ScrollReveal';
 import styles from './page.module.css';
 
@@ -14,7 +14,7 @@ export default async function Home() {
           HERO — WebGL Fluid Gradient + The Hook
           ════════════════════════════════════════════════════════ */}
       <section className={styles.hero}>
-        <FluidGradientCanvas />
+        <HeroCanvas />
         <div className={`container ${styles.heroInner}`}>
           <div className={styles.heroBadge}>🔥 Limited Early Access — Founding Prices</div>
 
