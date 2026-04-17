@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getCart } from '@/app/actions/cart';
+import CartItemControls from '@/components/CartItemControls';
 import styles from './page.module.css';
 
 export default async function CartPage() {
@@ -12,6 +13,7 @@ export default async function CartPage() {
   const items = cart?.attributes?.cartItems || [];
 
   const subtotal = items.reduce((acc: number, item: any) => acc + (parseFloat(item.price) * item.quantity), 0);
+  const totalItems = items.reduce((acc: number, item: any) => acc + item.quantity, 0);
 
   return (
     <div className={`container ${styles.cartContainer}`}>
@@ -31,11 +33,14 @@ export default async function CartPage() {
                 <div className={styles.itemInfo}>
                   <Link href={`/product/${item.slug}`} className={styles.itemTitle}>{item.title}</Link>
                   <div className={styles.itemPrice}>
-                    ${parseFloat(item.price).toFixed(2)} x {item.quantity}
+                    Tk {parseFloat(item.price).toFixed(2)} each
                   </div>
                 </div>
-                <div style={{ fontWeight: 600, fontSize: '1.25rem', display: 'flex', alignItems: 'center' }}>
-                  ${(parseFloat(item.price) * item.quantity).toFixed(2)}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+                  <div style={{ fontWeight: 700, fontSize: '1.15rem', marginBottom: '8px' }}>
+                    Tk {(parseFloat(item.price) * item.quantity).toFixed(2)}
+                  </div>
+                  <CartItemControls productId={item.id} initialQuantity={item.quantity} />
                 </div>
               </div>
             ))}
@@ -44,16 +49,16 @@ export default async function CartPage() {
           <div className={styles.summary}>
             <h3>Order Summary</h3>
             <div className={styles.summaryRow}>
-              <span>Subtotal</span>
-              <span>${subtotal.toFixed(2)}</span>
+              <span>Items ({totalItems})</span>
+              <span>Tk {subtotal.toFixed(2)}</span>
             </div>
             <div className={styles.summaryRow}>
               <span>Shipping</span>
-              <span>Calculated at checkout</span>
+              <span style={{ color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>Calculated at checkout</span>
             </div>
             <div className={styles.summaryTotal}>
               <span>Total</span>
-              <span>${subtotal.toFixed(2)}</span>
+              <span>Tk {subtotal.toFixed(2)}</span>
             </div>
             
             <Link href="/checkout" className="btn-primary" style={{ width: '100%', marginTop: '1rem' }}>

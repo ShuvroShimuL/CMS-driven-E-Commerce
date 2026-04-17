@@ -121,3 +121,39 @@ export async function clearCart() {
   
   revalidatePath('/', 'layout');
 }
+
+/**
+ * Update quantity of a specific cart item.
+ * If quantity <= 0, removes the item.
+ */
+export async function updateCartItemQuantity(productId: number, newQuantity: number) {
+  const cart = await getCart();
+  if (!cart) return { success: false, error: 'Cart not found' };
+
+  let currentItems = cart.attributes.cartItems || [];
+
+  if (newQuantity <= 0) {
+    currentItems = currentItems.filter((item: any) => item.id !== productId);
+  } else {
+    const idx = currentItems.findIndex((item: any) => item.id === productId);
+    if (idx === -1) return { success: false, error: 'Item not in cart' };
+    currentItems[idx].quantity = newQuantity;
+  }
+
+  await fetchAPI(`/carts/${cart.id}`, {}, {
+    method: 'PUT',
+    auth: false,
+    cache: 'no-store',
+    body: { data: { cartItems: currentItems } }
+  });
+
+  revalidatePath('/', 'layout');
+  return { success: true };
+}
+
+/**
+ * Remove a specific item from the cart entirely.
+ */
+export async function removeCartItem(productId: number) {
+  return updateCartItemQuantity(productId, 0);
+}
