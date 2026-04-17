@@ -2,13 +2,44 @@ import { notFound } from 'next/navigation';
 import { getProductBySlug, getProducts } from '@/lib/api';
 import AddToCartButton from '@/components/AddToCartButton';
 import ReviewSection from '@/components/ReviewSection';
+import ProductJsonLd from '@/components/ProductJsonLd';
 import styles from './page.module.css';
+import type { Metadata } from 'next';
 
 export async function generateStaticParams() {
   const products = await getProducts();
   return products.map((product: any) => ({
     slug: product.attributes.slug,
   }));
+}
+
+export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  const product = await getProductBySlug(params.slug);
+  if (!product) return { title: 'Product Not Found' };
+
+  const { title, description, price, images, category } = product.attributes;
+  const imageUrl = images?.data?.[0]?.attributes?.url;
+  const categoryName = category?.data?.attributes?.name || 'Products';
+  const desc = description
+    ? (typeof description === 'string' ? description : 'Premium quality product').slice(0, 155) + '…'
+    : `Shop ${title} at Premium Store — ${categoryName}`;
+
+  return {
+    title: `${title} — Tk ${parseFloat(price).toFixed(2)}`,
+    description: desc,
+    openGraph: {
+      title: `${title} — Tk ${parseFloat(price).toFixed(2)}`,
+      description: desc,
+      type: 'website',
+      ...(imageUrl && { images: [{ url: imageUrl, width: 800, height: 800, alt: title }] }),
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description: desc,
+      ...(imageUrl && { images: [imageUrl] }),
+    },
+  };
 }
 
 export default async function ProductPage({ params }: { params: { slug: string } }) {
@@ -30,6 +61,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
 
   return (
     <div className={`container ${styles.container}`}>
+      <ProductJsonLd product={product} />
       <div className={styles.grid}>
         <div className={styles.imageGallery}>
           <img src={imageUrl} alt={title} className={styles.mainImage} />
@@ -38,7 +70,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
         <div className={styles.info}>
           <span className={styles.category}>{categoryName}</span>
           <h1 className={styles.title}>{title}</h1>
-          <div className={styles.price}>${parseFloat(price).toFixed(2)}</div>
+          <div className={styles.price}>Tk {parseFloat(price).toFixed(2)}</div>
           
           <div className={styles.description}>
             {description}

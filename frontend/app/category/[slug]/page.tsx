@@ -1,6 +1,7 @@
 import { getCategoryBySlug, getProducts, getCategories } from '@/lib/api';
 import ProductCard from '@/components/ProductCard';
 import styles from './page.module.css';
+import type { Metadata } from 'next';
 
 export async function generateStaticParams() {
   const categories = await getCategories();
@@ -9,6 +10,29 @@ export async function generateStaticParams() {
   }));
 }
 
+export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  if (params.slug === 'all') {
+    return {
+      title: 'All Products',
+      description: 'Browse our full catalog of premium products — electronics, fashion, lifestyle essentials. Fast delivery across Bangladesh.',
+    };
+  }
+
+  const category = await getCategoryBySlug(params.slug);
+  if (!category) return { title: 'Category Not Found' };
+
+  const name = category.attributes.name;
+  const count = category.attributes.products?.data?.length || 0;
+
+  return {
+    title: `${name}`,
+    description: `Shop ${count} premium ${name.toLowerCase()} products at Premium Store. Quality guaranteed with fast delivery.`,
+    openGraph: {
+      title: `${name} — Premium Store`,
+      description: `Explore ${count} curated ${name.toLowerCase()} products.`,
+    },
+  };
+}
 export default async function CategoryPage({ params }: { params: { slug: string } }) {
   const isAll = params.slug === 'all';
   let title = 'All Products';

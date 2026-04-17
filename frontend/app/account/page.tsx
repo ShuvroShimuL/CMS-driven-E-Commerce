@@ -26,7 +26,7 @@ async function getOrders(token: string) {
 
 export default async function AccountPage() {
   const cookieStore = cookies();
-  const token = cookieStore.get('token')?.value;
+  const token = cookieStore.get('commerce_access_token')?.value;
 
   if (!token) {
     redirect('/login');
