@@ -15,7 +15,7 @@ export default function ProductCard({ product }: { product: any }) {
         <span className={styles.category}>{categoryName}</span>
         <h3 className={styles.title}>{title}</h3>
         <div className={styles.footer}>
-          <span className={styles.price}>${parseFloat(price).toFixed(2)}</span>
+          <span className={styles.price}>Tk {parseFloat(price).toFixed(2)}</span>
           <span style={{ color: 'var(--accent-color)', fontWeight: 600, fontSize: '0.875rem' }}>View Details &rarr;</span>
         </div>
       </div>
