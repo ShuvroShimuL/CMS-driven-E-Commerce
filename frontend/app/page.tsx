@@ -45,7 +45,11 @@ export default async function Home() {
           </div>
 
           <div className={styles.heroVisual}>
-            <div className={styles.heroVisualInner}>P.</div>
+            <img
+              src="/images/hero-visual.jpg"
+              alt="Premium lifestyle — dark moody scene"
+              className={styles.heroImage}
+            />
           </div>
         </div>
       </section>
