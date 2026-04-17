@@ -7,7 +7,7 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'shamimrshimul0403@gmail.com';
 const SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || 'shamimrshimul0403@gmail.com';
 
 /**
- * Handles order creation: locks inventory, confirms COD, creates Strapi order, sends emails.
+ * Handles order creation: locks inventory, confirms payment (COD or bKash), creates Strapi order, sends emails.
  */
 export async function processCheckout(formData: FormData) {
   try {
@@ -22,14 +22,14 @@ export async function processCheckout(formData: FormData) {
       (acc: number, item: any) => acc + (parseFloat(item.price) * item.quantity), 0
     );
 
-    // Compute shipping serverside to prevent tampering
     const district = (rawData.district as string || '').trim().toLowerCase();
     const isDhaka = district === 'dhaka' || district === 'dhaka city';
     const shippingCost = isDhaka ? 60 : 120;
     const totalAmount = subtotal + shippingCost;
 
-    // Pass coupon code if provided — commerce-api validates and applies it atomically
     const couponCode = (rawData.couponCode as string || '').trim().toUpperCase() || undefined;
+    const paymentMethod = (rawData.paymentMethod as string) || 'cod';
+    const bkashTxnId = (rawData.bkashTxnId as string || '').trim();
 
     const COMMERCE_API = process.env.COMMERCE_API_URL || 'http://localhost:4000/api/v1';
 
@@ -54,11 +54,22 @@ export async function processCheckout(formData: FormData) {
 
     const { transaction_id } = await initRes.json();
 
-    // Step 2: Confirm COD (creates Strapi order + decrements stock)
-    const confirmRes = await fetch(`${COMMERCE_API}/payments/confirm-cod`, {
+    // Step 2: Confirm payment based on method
+    let confirmUrl: string;
+    let confirmBody: Record<string, any>;
+
+    if (paymentMethod === 'bkash') {
+      confirmUrl = `${COMMERCE_API}/payments/confirm-bkash`;
+      confirmBody = { transaction_id, bkash_txn_id: bkashTxnId };
+    } else {
+      confirmUrl = `${COMMERCE_API}/payments/confirm-cod`;
+      confirmBody = { transaction_id };
+    }
+
+    const confirmRes = await fetch(confirmUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transaction_id })
+      body: JSON.stringify(confirmBody)
     });
 
     if (!confirmRes.ok) {
@@ -73,9 +84,10 @@ export async function processCheckout(formData: FormData) {
     const customerName = rawData.fullName as string || 'Customer';
     const customerEmail = rawData.email as string || '';
 
-    // Step 4: Send emails (non-blocking — don't fail the order if email fails)
-    sendCustomerEmail(customerEmail, customerName, shortId, items, subtotal, rawData);
-    sendAdminEmail(customerName, customerEmail, shortId, items, subtotal, rawData);
+    // Step 4: Send emails (non-blocking)
+    const paymentLabel = paymentMethod === 'bkash' ? 'bKash' : 'Cash on Delivery';
+    sendCustomerEmail(customerEmail, customerName, shortId, items, subtotal, rawData, paymentLabel, bkashTxnId);
+    sendAdminEmail(customerName, customerEmail, shortId, items, subtotal, rawData, paymentLabel, bkashTxnId);
 
     return { success: true, orderId: transaction_id };
 
@@ -85,12 +97,14 @@ export async function processCheckout(formData: FormData) {
   }
 }
 
+
 // ─────────────────────────────────────────────────────────────
 // Customer confirmation email
 // ─────────────────────────────────────────────────────────────
 async function sendCustomerEmail(
   email: string, name: string, orderId: string,
-  items: any[], total: number, customer: any
+  items: any[], total: number, customer: any,
+  paymentLabel: string = 'Cash on Delivery', bkashTxnId: string = ''
 ) {
   if (!BREVO_KEY || !email) return;
 
@@ -98,18 +112,27 @@ async function sendCustomerEmail(
     `<tr>
       <td style="padding:8px;border-bottom:1px solid #eee">${item.title}</td>
       <td style="padding:8px;border-bottom:1px solid #eee;text-align:center">${item.quantity}</td>
-      <td style="padding:8px;border-bottom:1px solid #eee;text-align:right">$${(parseFloat(item.price) * item.quantity).toFixed(2)}</td>
+      <td style="padding:8px;border-bottom:1px solid #eee;text-align:right">Tk ${(parseFloat(item.price) * item.quantity).toFixed(2)}</td>
     </tr>`
   ).join('');
+
+  const isBkash = paymentLabel === 'bKash';
+  const paymentNote = isBkash
+    ? `<p style="background:#fdf2f8;padding:12px;border-radius:8px;border:1px solid #f9a8d4">
+        <strong>Payment:</strong> bKash<br/>
+        <strong>bKash TxnID:</strong> ${bkashTxnId}<br/>
+        <em>Your payment is being verified. We'll confirm your order shortly.</em>
+       </p>`
+    : `<p>You will pay the courier upon delivery. We'll dispatch your order shortly!</p>`;
 
   const payload = {
     sender: { name: "Premium Store", email: SENDER_EMAIL },
     to: [{ email, name }],
-    subject: `Order Confirmed #${orderId} — Premium Store`,
+    subject: `Order ${isBkash ? 'Received' : 'Confirmed'} #${orderId} — Premium Store`,
     htmlContent: `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
         <h2 style="color:#7c3aed">🎉 Thank you, ${name}!</h2>
-        <p>Your order <strong>#${orderId}</strong> has been confirmed.</p>
+        <p>Your order <strong>#${orderId}</strong> has been ${isBkash ? 'received and is pending payment verification' : 'confirmed'}.</p>
         <table style="width:100%;border-collapse:collapse;margin:16px 0">
           <thead>
             <tr style="background:#f4f4f5">
@@ -122,14 +145,14 @@ async function sendCustomerEmail(
           <tfoot>
             <tr>
               <td colspan="2" style="padding:8px;font-weight:bold">Total</td>
-              <td style="padding:8px;text-align:right;font-weight:bold">$${total.toFixed(2)}</td>
+              <td style="padding:8px;text-align:right;font-weight:bold">Tk ${total.toFixed(2)}</td>
             </tr>
           </tfoot>
         </table>
         <p><strong>Delivery Address:</strong><br/>
           ${customer.fullAddress}, ${customer.thana}, ${customer.district}, ${customer.division}
         </p>
-        <p>You will pay the courier upon delivery. We'll dispatch your order shortly!</p>
+        ${paymentNote}
         <p>Best regards,<br/><strong>Premium Store Team</strong></p>
       </div>
     `
@@ -151,23 +174,35 @@ async function sendCustomerEmail(
 // ─────────────────────────────────────────────────────────────
 async function sendAdminEmail(
   customerName: string, customerEmail: string, orderId: string,
-  items: any[], total: number, customer: any
+  items: any[], total: number, customer: any,
+  paymentLabel: string = 'Cash on Delivery', bkashTxnId: string = ''
 ) {
   if (!BREVO_KEY) return;
 
+  const isBkash = paymentLabel === 'bKash';
   const itemList = items.map((item: any) =>
-    `<li>${item.title} × ${item.quantity} — $${(parseFloat(item.price) * item.quantity).toFixed(2)}</li>`
+    `<li>${item.title} × ${item.quantity} — Tk ${(parseFloat(item.price) * item.quantity).toFixed(2)}</li>`
   ).join('');
+
+  const bkashBlock = isBkash
+    ? `<div style="background:#fdf2f8;padding:12px;border-radius:8px;margin:12px 0;border:1px solid #e2136e">
+        <strong style="color:#e2136e">⚠️ bKash Payment — Verification Required</strong><br/>
+        <strong>bKash TxnID:</strong> ${bkashTxnId}<br/>
+        <em>Please verify this transaction in your bKash app, then update the order status in Strapi.</em>
+       </div>`
+    : '';
 
   const payload = {
     sender: { name: "Premium Store", email: SENDER_EMAIL },
     to: [{ email: ADMIN_EMAIL, name: "Admin" }],
-    subject: `🛒 New Order #${orderId} — $${total.toFixed(2)}`,
+    subject: `${isBkash ? '🔔 bKash Verification Needed' : '🛒 New COD Order'} #${orderId} — Tk ${total.toFixed(2)}`,
     htmlContent: `
-      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;border:2px solid #7c3aed;border-radius:8px">
-        <h2 style="color:#7c3aed">New Order Received!</h2>
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;border:2px solid ${isBkash ? '#e2136e' : '#7c3aed'};border-radius:8px">
+        <h2 style="color:${isBkash ? '#e2136e' : '#7c3aed'}">New Order Received!</h2>
         <p><strong>Order ID:</strong> #${orderId}</p>
-        <p><strong>Total:</strong> $${total.toFixed(2)}</p>
+        <p><strong>Total:</strong> Tk ${total.toFixed(2)}</p>
+        <p><strong>Payment:</strong> ${paymentLabel}</p>
+        ${bkashBlock}
         <hr/>
         <h3>Customer Details</h3>
         <p>

@@ -7,6 +7,7 @@ import styles from './page.module.css';
 import { getCart } from '@/app/actions/cart';
 
 const COMMERCE_API = process.env.NEXT_PUBLIC_COMMERCE_API_URL || 'https://cms-driven-e-commerce-api.onrender.com/api/v1';
+const BKASH_NUMBER = '01910717957';
 
 export default function CheckoutPage() {
   const [loading, setLoading]           = useState(false);
@@ -14,6 +15,10 @@ export default function CheckoutPage() {
   const [district, setDistrict]         = useState('');
   const [shippingCost, setShippingCost] = useState(60);
   const [subtotal, setSubtotal]         = useState(0);
+
+  // Payment method
+  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'bkash'>('cod');
+  const [bkashTxnId, setBkashTxnId]       = useState('');
 
   // Coupon state
   const [couponCode, setCouponCode]         = useState('');
@@ -24,7 +29,6 @@ export default function CheckoutPage() {
 
   const router = useRouter();
 
-  // Load subtotal on mount
   useEffect(() => {
     async function loadCart() {
       const cart = await getCart();
@@ -35,13 +39,11 @@ export default function CheckoutPage() {
     loadCart();
   }, []);
 
-  // Recalculate shipping when district changes; also clear coupon discount
   useEffect(() => {
     const d = district.trim().toLowerCase();
     if (d === 'dhaka' || d === 'dhaka city') setShippingCost(60);
     else if (d.length > 0) setShippingCost(120);
     else setShippingCost(60);
-    // Reset coupon when district changes (totals change)
     if (discountAmount > 0) {
       setDiscountAmount(0);
       setCouponSuccess(null);
@@ -91,15 +93,23 @@ export default function CheckoutPage() {
     setLoading(true);
     setError(null);
 
+    // Validate bKash TxnID if bKash selected
+    if (paymentMethod === 'bkash' && bkashTxnId.trim().length < 4) {
+      setError('Please enter a valid bKash Transaction ID');
+      setLoading(false);
+      return;
+    }
+
     const formData = new FormData(e.currentTarget);
     formData.set('district', district);
-    // Pass coupon code so server action forwards it to commerce-api
+    formData.set('paymentMethod', paymentMethod);
+    if (paymentMethod === 'bkash') formData.set('bkashTxnId', bkashTxnId.trim());
     if (couponCode.trim()) formData.set('couponCode', couponCode.trim().toUpperCase());
 
     const result = await processCheckout(formData);
 
     if (result.success && result.orderId) {
-      router.replace(`/order-success?id=${(result.orderId as string).slice(0, 8).toUpperCase()}`);
+      router.replace(`/order-success?id=${(result.orderId as string).slice(0, 8).toUpperCase()}&method=${paymentMethod}`);
     } else {
       setError(result.error || 'Checkout failed. Please try again.');
       setLoading(false);
@@ -199,17 +209,147 @@ export default function CheckoutPage() {
             {couponError && <p style={{ color: '#ef4444', fontSize: '0.8rem', margin: '8px 0 0' }}>{couponError}</p>}
           </div>
 
-          <div className={styles.paymentNotice}>
-            🔒 Secure Payment via SSLCommerz (Cards, Mobile Banking, Net Banking)
+          {/* ─── Payment Method Selector ─── */}
+          <div style={{ margin: '0 0 24px', padding: '20px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+            <label style={{ display: 'block', marginBottom: '14px', fontWeight: 600, fontSize: '0.9rem' }}>
+              💳 Payment Method
+            </label>
+
+            <div style={{ display: 'flex', gap: '12px', marginBottom: paymentMethod === 'bkash' ? '16px' : 0 }}>
+              {/* COD Option */}
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('cod')}
+                style={{
+                  flex: 1,
+                  padding: '14px 16px',
+                  borderRadius: '10px',
+                  border: paymentMethod === 'cod' ? '2px solid #121212' : '2px solid #e2e8f0',
+                  background: paymentMethod === 'cod' ? '#f1f5f9' : '#fff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <span style={{ fontSize: '1.3rem' }}>🚚</span>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>Cash on Delivery</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Pay when you receive</div>
+                </div>
+              </button>
+
+              {/* bKash Option */}
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('bkash')}
+                style={{
+                  flex: 1,
+                  padding: '14px 16px',
+                  borderRadius: '10px',
+                  border: paymentMethod === 'bkash' ? '2px solid #e2136e' : '2px solid #e2e8f0',
+                  background: paymentMethod === 'bkash' ? '#fdf2f8' : '#fff',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  transition: 'all 0.2s',
+                }}
+              >
+                <span style={{ fontSize: '1.3rem', color: '#e2136e', fontWeight: 800 }}>b</span>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>bKash</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Send money manually</div>
+                </div>
+              </button>
+            </div>
+
+            {/* ─── bKash Instructions Panel ─── */}
+            {paymentMethod === 'bkash' && (
+              <div style={{
+                background: '#fff',
+                border: '1px solid #f9a8d4',
+                borderRadius: '10px',
+                padding: '16px',
+              }}>
+                <div style={{ marginBottom: '12px', fontSize: '0.875rem', color: '#4a4a4a', lineHeight: 1.7 }}>
+                  <strong style={{ color: '#e2136e' }}>Steps:</strong>
+                  <ol style={{ margin: '8px 0 0 16px', padding: 0 }}>
+                    <li>Open your bKash app → <strong>Send Money</strong></li>
+                    <li>Send <strong>Tk {orderTotal.toFixed(2)}</strong> to:</li>
+                  </ol>
+                </div>
+
+                <div style={{
+                  background: '#fdf2f8',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: '12px',
+                }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '2px' }}>bKash Number</div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#e2136e', letterSpacing: '1px' }}>
+                      {BKASH_NUMBER}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { navigator.clipboard.writeText(BKASH_NUMBER); }}
+                    style={{
+                      background: '#e2136e', color: '#fff', border: 'none', borderRadius: '6px',
+                      padding: '6px 14px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+
+                <div style={{ marginBottom: '8px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, fontSize: '0.85rem', color: '#4a4a4a' }}>
+                    Your bKash Transaction ID *
+                  </label>
+                  <input
+                    type="text"
+                    value={bkashTxnId}
+                    onChange={(e) => setBkashTxnId(e.target.value.toUpperCase())}
+                    placeholder="e.g. TRX1234ABCD"
+                    required={paymentMethod === 'bkash'}
+                    className={styles.input}
+                    style={{ margin: 0, textTransform: 'uppercase', borderColor: '#f9a8d4' }}
+                  />
+                  <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '4px' }}>
+                    Find this in your bKash app → Transaction History
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
+
+          {paymentMethod === 'cod' && (
+            <div className={styles.paymentNotice}>
+              🚚 Cash on Delivery — Pay when your order arrives
+            </div>
+          )}
 
           <button
             type="submit"
             className={`btn-primary ${styles.submitBtn}`}
             disabled={loading}
-            style={{ opacity: loading ? 0.7 : 1 }}
+            style={{
+              opacity: loading ? 0.7 : 1,
+              background: paymentMethod === 'bkash' ? '#e2136e' : undefined,
+            }}
           >
-            {loading ? 'Processing Order...' : `Place Order • Tk ${orderTotal.toFixed(2)}`}
+            {loading
+              ? 'Processing Order...'
+              : paymentMethod === 'bkash'
+                ? `Confirm bKash Payment • Tk ${orderTotal.toFixed(2)}`
+                : `Place Order (COD) • Tk ${orderTotal.toFixed(2)}`
+            }
           </button>
         </form>
 
@@ -230,6 +370,10 @@ export default function CheckoutPage() {
               <span>– Tk {discountAmount.toFixed(2)}</span>
             </div>
           )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', color: '#64748b', fontSize: '0.85rem' }}>
+            <span>Payment</span>
+            <span>{paymentMethod === 'bkash' ? 'bKash' : 'Cash on Delivery'}</span>
+          </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '1.2rem', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
             <span>Total</span>
             <span>Tk {orderTotal.toFixed(2)}</span>

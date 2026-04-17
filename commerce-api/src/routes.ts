@@ -549,5 +549,128 @@ router.post('/payments/confirm-cod', checkoutLimiter, async (req, res) => {
   }
 });
 
-export { router as commerceRoutes };
+// =====================================================
+// bKash Manual Payment — customer sends money, submits TxnID
+// Admin verifies in Strapi dashboard
+// =====================================================
+router.post('/payments/confirm-bkash', checkoutLimiter, async (req, res) => {
+  const { transaction_id, bkash_txn_id } = req.body;
+  if (!transaction_id) return res.status(400).json({ error: 'transaction_id required' });
+  if (!bkash_txn_id || bkash_txn_id.trim().length < 4) {
+    return res.status(400).json({ error: 'A valid bKash Transaction ID is required' });
+  }
 
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows } = await client.query(
+      'SELECT * FROM commerce_transactions WHERE transaction_id = $1 FOR UPDATE',
+      [transaction_id]
+    );
+
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    const tx = rows[0];
+    if (tx.status !== 'PENDING') {
+      await client.query('ROLLBACK');
+      return res.status(200).json({ message: 'Already processed', status: tx.status });
+    }
+
+    const items = tx.cart_items;
+
+    // Commit reserved stock (same as COD — stock already decremented at lock time)
+    for (const item of items) {
+      await client.query(`
+        UPDATE commerce_inventory 
+        SET reserved_qty = GREATEST(reserved_qty - $2, 0)
+        WHERE strapi_id = $1
+      `, [item.id, item.quantity]);
+    }
+
+    // Store bKash TxnID in customer_info for admin reference
+    const updatedCustomerInfo = {
+      ...tx.customer_info,
+      bkash_txn_id: bkash_txn_id.trim(),
+      payment_method: 'bkash',
+    };
+
+    await client.query(
+      `UPDATE commerce_transactions 
+       SET status = 'PENDING_BKASH_VERIFICATION', customer_info = $2 
+       WHERE transaction_id = $1`,
+      [transaction_id, JSON.stringify(updatedCustomerInfo)]
+    );
+
+    await client.query('COMMIT');
+
+    // Create Strapi order with bKash-specific fields
+    const bkashTx = { ...tx, customer_info: updatedCustomerInfo };
+    await createStrapiOrderBkash(bkashTx, items, bkash_txn_id.trim());
+    for (const item of items) {
+      await decrementStrapiStock(item.id, item.quantity);
+    }
+
+    res.json({
+      success: true,
+      message: 'Order placed — pending bKash payment verification',
+      transaction_id,
+      bkash_txn_id: bkash_txn_id.trim(),
+    });
+
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Helper: Create Strapi order with bKash payment metadata
+async function createStrapiOrderBkash(tx: any, items: any[], bkashTxnId: string) {
+  const STRAPI_URL = process.env.STRAPI_URL || 'https://cms-driven-e-commerce.onrender.com';
+  const STRAPI_TOKEN = process.env.STRAPI_API_TOKEN;
+
+  const customer = tx.customer_info || {};
+  const payload = {
+    data: {
+      fullName: customer.fullName || customer.name || 'Customer',
+      email: customer.email || '',
+      phone: customer.phone || '',
+      fullAddress: customer.fullAddress || customer.address || '',
+      division: customer.division || '',
+      district: customer.district || '',
+      thana: customer.thana || '',
+      cartItems: items,
+      totalAmount: parseFloat(tx.total_amount),
+      status: 'pending_verification',
+      payment_method: 'bkash',
+      bkash_txn_id: bkashTxnId,
+    }
+  };
+
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (STRAPI_TOKEN) headers['Authorization'] = `Bearer ${STRAPI_TOKEN}`;
+
+    const res = await fetch(`${STRAPI_URL}/api/orders`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('[Order:bKash] Strapi order creation failed:', text);
+    } else {
+      console.log('[Order:bKash] Strapi order created — pending verification');
+    }
+  } catch (err: any) {
+    console.error('[Order:bKash] Could not reach Strapi:', err.message);
+  }
+}
+
+export { router as commerceRoutes };
