@@ -20,14 +20,14 @@ function setAuthCookies(accessToken: string, refreshToken: string, user: any) {
   store.set(REFRESH_COOKIE, refreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24 * 7,    // 7 days
+    maxAge: 60 * 60 * 24 * 30,    // 30 days inactivity auto-logout
     path: '/', sameSite: 'lax'
   });
   // non-httpOnly so header server component can read it without an extra API call
   store.set(USER_COOKIE, JSON.stringify({ id: user.id, email: user.email, full_name: user.full_name }), {
     httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: 60 * 60 * 24 * 30, // 30 days
     path: '/', sameSite: 'lax'
   });
 }

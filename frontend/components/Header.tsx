@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { getCart } from '@/app/actions/cart';
+import { logoutUser } from '@/app/actions/auth';
 import styles from './Header.module.css';
 
 export default async function Header() {
@@ -37,10 +38,17 @@ export default async function Header() {
         <div className={styles.actions}>
           {authUser ? (
             <>
-              <Link href="/account" className={styles.navLink}
-                style={{ fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                👤 {firstName}
-              </Link>
+              <div className={styles.profileMenu}>
+                <button className={styles.navLink} style={{ fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer', paddingBottom: '16px', marginBottom: '-16px' }}>
+                  👤 {firstName} ▾
+                </button>
+                <div className={styles.profileDropdown}>
+                  <Link href="/account" className={styles.dropdownItem}>My Account</Link>
+                  <form action={logoutUser}>
+                    <button type="submit" className={`${styles.dropdownItem} ${styles.logoutBtn}`}>Log Out</button>
+                  </form>
+                </div>
+              </div>
               <span style={{ color: '#cbd5e1' }}>|</span>
               <Link href="/cart" className={styles.cartBtn}>
                 Cart ({totalQuantity})
