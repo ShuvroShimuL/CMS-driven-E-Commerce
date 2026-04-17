@@ -102,6 +102,13 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_commerce_coupons_code ON commerce_coupons (code)
     `);
 
+    // Seed: ensure WELCOME10 coupon always exists (idempotent)
+    await client.query(`
+      INSERT INTO commerce_coupons (code, type, value, min_order_amount, max_discount, usage_limit, is_active)
+      VALUES ('WELCOME10', 'percentage', 10, 0, 500, 10000, TRUE)
+      ON CONFLICT (code) DO NOTHING
+    `);
+
     // ── Sprint 8: Dead-Letter Queue ───────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS commerce_dlq (
