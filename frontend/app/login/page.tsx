@@ -53,7 +53,7 @@ function LoginForm() {
             placeholder="Your password" className={styles.input} />
         </div>
         <div style={{ textAlign: 'right', marginTop: '-0.5rem' }}>
-          <Link href="/forgot-password" style={{ fontSize: '0.8rem', color: '#7c3aed' }}>
+          <Link href="/forgot-password" style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
             Forgot password?
           </Link>
         </div>
