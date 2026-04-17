@@ -24,6 +24,7 @@ import { userRouter } from './userRoutes';
 import { shippingRouter } from './shippingRoutes';
 import { webhookRouter } from './webhookRoutes';
 import { couponRouter } from './couponRoutes';
+import { reviewRouter } from './reviewRoutes';
 import { cartLimiter } from './middleware';
 import { runMigrations } from './init';
 import './cron';
@@ -42,9 +43,10 @@ app.use('/api/v1/users', userRouter);
 app.use('/api/v1/shipping', cartLimiter, shippingRouter);
 app.use('/api/v1/webhooks', webhookRouter);
 app.use('/api/v1/coupons', couponRouter);
+app.use('/api/v1/reviews', reviewRouter);
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'active', service: 'commerce-api', sprint: 8 });
+  res.json({ status: 'active', service: 'commerce-api', sprint: 9 });
 });
 
 // Auto-migrate on every startup — idempotent (IF NOT EXISTS), safe to re-run

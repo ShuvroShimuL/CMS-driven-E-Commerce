@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getProductBySlug, getProducts } from '@/lib/api';
 import AddToCartButton from '@/components/AddToCartButton';
+import ReviewSection from '@/components/ReviewSection';
 import styles from './page.module.css';
 
 export async function generateStaticParams() {
@@ -52,6 +53,10 @@ export default async function ProductPage({ params }: { params: { slug: string }
           </div>
         </div>
       </div>
+
+      {/* Customer Reviews */}
+      <ReviewSection productId={product.id} productSlug={params.slug} />
     </div>
   );
 }
+

@@ -116,7 +116,31 @@ export async function runMigrations() {
       )
     `);
 
+    // ── Sprint 9: Reviews ─────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS commerce_reviews (
+        id BIGSERIAL PRIMARY KEY,
+        product_strapi_id INTEGER NOT NULL,
+        product_slug VARCHAR(255) NOT NULL,
+        rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+        comment TEXT NOT NULL,
+        author_name VARCHAR(255) NOT NULL,
+        author_email VARCHAR(255) NOT NULL,
+        is_verified_purchase BOOLEAN NOT NULL DEFAULT FALSE,
+        is_approved BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_commerce_reviews_product ON commerce_reviews (product_strapi_id)
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_commerce_reviews_unique ON commerce_reviews (author_email, product_strapi_id)
+    `);
+
     await client.query('COMMIT');
+
     console.log('✅ [Migrations] All tables up to date');
   } catch (e) {
     await client.query('ROLLBACK');
