@@ -5,6 +5,27 @@
   transition: var(--transition);
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.wishlistCorner {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  background: rgba(10, 10, 10, 0.7);
+  backdrop-filter: blur(4px);
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.wishlistCorner:hover {
+  background: rgba(10, 10, 10, 0.9);
 }
 
 .card:hover {

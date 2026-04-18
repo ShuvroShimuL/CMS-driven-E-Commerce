@@ -1,8 +1,10 @@
 import { notFound } from 'next/navigation';
 import { getProductBySlug, getProducts } from '@/lib/api';
 import AddToCartButton from '@/components/AddToCartButton';
+import WishlistButton from '@/components/WishlistButton';
 import ReviewSection from '@/components/ReviewSection';
 import ProductJsonLd from '@/components/ProductJsonLd';
+import { getWishlistIds } from '@/app/actions/wishlist';
 import styles from './page.module.css';
 import type { Metadata } from 'next';
 
@@ -61,6 +63,8 @@ export default async function ProductPage({ params }: { params: { slug: string }
   const imageUrl = images?.data?.[0]?.attributes?.url || 'https://via.placeholder.com/800x800?text=No+Image';
   const categoryName = category?.data?.attributes?.name || 'Uncategorized';
   const isOutOfStock = stock <= 0;
+  const wishlistIds = await getWishlistIds();
+  const isWishlisted = wishlistIds.includes(product.id);
 
   return (
     <div className={`container ${styles.container}`}>
@@ -85,6 +89,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
 
           <div className={styles.actions}>
             <AddToCartButton product={product} isOutOfStock={isOutOfStock} />
+            <WishlistButton productId={product.id} productSlug={params.slug} initialWishlisted={isWishlisted} size={22} />
           </div>
         </div>
       </div>

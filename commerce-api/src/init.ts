@@ -146,6 +146,22 @@ export async function runMigrations() {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_commerce_reviews_unique ON commerce_reviews (author_email, product_strapi_id)
     `);
 
+    // ── Phase 3: Wishlists ────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS commerce_wishlists (
+        id BIGSERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL REFERENCES commerce_users(id) ON DELETE CASCADE,
+        product_strapi_id INTEGER NOT NULL,
+        product_slug VARCHAR(255) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (user_id, product_strapi_id)
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_commerce_wishlists_user ON commerce_wishlists (user_id)
+    `);
+
     await client.query('COMMIT');
 
     console.log('✅ [Migrations] All tables up to date');

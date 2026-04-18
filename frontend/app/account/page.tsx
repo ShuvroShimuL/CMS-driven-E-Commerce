@@ -53,10 +53,19 @@ export default async function AccountPage() {
           fontFamily: 'var(--font-display)', fontSize: '2rem', fontWeight: 700,
           letterSpacing: '-1px', marginBottom: '8px', color: 'var(--text-primary)',
         }}>My Account</h1>
-        <p style={{ color: 'var(--text-tertiary)', marginBottom: '32px', fontSize: '0.9rem' }}>
+        <p style={{ color: 'var(--text-tertiary)', marginBottom: '16px', fontSize: '0.9rem' }}>
           Welcome back, <strong style={{ color: 'var(--text-primary)' }}>{profileData.user.full_name}</strong> · {maskEmail(profileData.user.email)}
           {profileData.user.phone && <> · {maskPhone(profileData.user.phone)}</>}
         </p>
+
+        <Link href="/wishlist" style={{
+          display: 'inline-block', marginBottom: '32px', fontSize: '0.8rem',
+          color: 'var(--text-primary)', fontWeight: 600, textDecoration: 'none',
+          border: '1px solid var(--border-color)', padding: '8px 16px',
+          transition: 'border-color 0.2s',
+        }}>
+          ♡ View Wishlist →
+        </Link>
 
         <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
           <div style={{

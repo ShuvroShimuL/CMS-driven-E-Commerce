@@ -44,6 +44,7 @@ export default async function Header() {
                 </button>
                 <div className={styles.profileDropdown}>
                   <Link href="/account" className={styles.dropdownItem}>My Account</Link>
+                  <Link href="/wishlist" className={styles.dropdownItem}>My Wishlist</Link>
                   <form action={logoutUser}>
                     <button type="submit" className={`${styles.dropdownItem} ${styles.logoutBtn}`}>Log Out</button>
                   </form>

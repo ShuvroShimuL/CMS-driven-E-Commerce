@@ -1,5 +1,6 @@
 import { getCategoryBySlug, getProducts, getCategories } from '@/lib/api';
 import ProductCard from '@/components/ProductCard';
+import { getWishlistIds } from '@/app/actions/wishlist';
 import styles from './page.module.css';
 import type { Metadata } from 'next';
 
@@ -78,6 +79,8 @@ export default async function CategoryPage({ params }: { params: { slug: string 
     }
   }
 
+  const wishlistIds = await getWishlistIds();
+
   return (
     <>
       <div className={styles.header}>
@@ -98,7 +101,7 @@ export default async function CategoryPage({ params }: { params: { slug: string 
         ) : (
           <div className={styles.productGrid}>
             {products.map((product: any) => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard key={product.id} product={product} isWishlisted={wishlistIds.includes(product.id)} />
             ))}
           </div>
         )}
