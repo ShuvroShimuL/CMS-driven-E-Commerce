@@ -1,4 +1,4 @@
-import { getProducts, getCategories } from '@/lib/api';
+import { getProducts, getCategories, getBlogPosts } from '@/lib/api';
 import type { MetadataRoute } from 'next';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://cms-driven-e-commerce.vercel.app';
@@ -8,6 +8,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     { url: SITE_URL, lastModified: new Date(), changeFrequency: 'daily', priority: 1.0 },
     { url: `${SITE_URL}/category/all`, lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
+    { url: `${SITE_URL}/blog`, lastModified: new Date(), changeFrequency: 'weekly', priority: 0.8 },
     { url: `${SITE_URL}/login`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.3 },
     { url: `${SITE_URL}/register`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.3 },
     { url: `${SITE_URL}/track`, lastModified: new Date(), changeFrequency: 'monthly', priority: 0.4 },
@@ -41,5 +42,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.error('[Sitemap] Failed to fetch categories:', e);
   }
 
-  return [...staticPages, ...productPages, ...categoryPages];
+  // Dynamic blog posts
+  let blogPages: MetadataRoute.Sitemap = [];
+  try {
+    const posts = await getBlogPosts();
+    blogPages = posts.map((p: any) => ({
+      url: `${SITE_URL}/blog/${p.attributes.slug}`,
+      lastModified: new Date(p.attributes.updatedAt || p.attributes.createdAt),
+      changeFrequency: 'monthly' as const,
+      priority: 0.6,
+    }));
+  } catch (e) {
+    console.error('[Sitemap] Failed to fetch blog posts:', e);
+  }
+
+  return [...staticPages, ...productPages, ...categoryPages, ...blogPages];
 }

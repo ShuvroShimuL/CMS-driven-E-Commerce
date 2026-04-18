@@ -85,3 +85,18 @@ export async function getCategoryBySlug(slug: string) {
   });
   return res.data?.[0] || null;
 }
+
+// Blog
+export async function getBlogPosts(params = {}) {
+  const defaultParams = { populate: 'cover', sort: 'createdAt:desc' };
+  const res = await fetchAPI('/blog-posts', { ...defaultParams, ...params });
+  return res.data || [];
+}
+
+export async function getBlogPostBySlug(slug: string) {
+  const res = await fetchAPI('/blog-posts', {
+    'filters[slug][$eq]': slug,
+    populate: 'cover'
+  });
+  return res.data?.[0] || null;
+}

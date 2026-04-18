@@ -32,6 +32,7 @@ export default async function Header() {
         <nav className={styles.nav}>
           <Link href="/"             className={styles.navLink}>Home</Link>
           <Link href="/category/all" className={styles.navLink}>Shop</Link>
+          <Link href="/blog"         className={styles.navLink}>Blog</Link>
           <Link href="/about"        className={styles.navLink}>About</Link>
         </nav>
 
