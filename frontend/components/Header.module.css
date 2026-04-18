@@ -114,3 +114,13 @@
 
 .logoutBtn { color: #ef4444; }
 .logoutBtn:hover { background: rgba(239, 68, 68, 0.1); color: #f87171; }
+
+@media (max-width: 900px) {
+  .nav {
+    display: none;
+  }
+  
+  .actions {
+    gap: 0.75rem;
+  }
+}
