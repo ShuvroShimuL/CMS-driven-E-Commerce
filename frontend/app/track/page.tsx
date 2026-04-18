@@ -15,14 +15,6 @@ function TrackingView() {
   const [error, setError] = useState('');
   const [status, setStatus] = useState<any>(null);
 
-  // We rely on backend fetching order ID to get tracking code, but right now
-  // commerce-api /shipping/tracking/:code accepts the courier's tracking code.
-  // Wait, if we only have orderId, our frontend doesn't know the code.
-  // Actually, wait, tracking via API requires tracking Code.
-  // The user Account page passes `?orderId=...`. But we also want users with 
-  // just the email link to track it.
-  // Let's implement fetch logic.
-  
   const handleFetch = async (queryCode: string) => {
     setLoading(true);
     setError('');
@@ -50,9 +42,12 @@ function TrackingView() {
       <h1 className={styles.title}>Track Package</h1>
       
       {!trackingCode && (
-        <div style={{ background: '#f8fafc', padding: '24px', borderRadius: '12px', marginBottom: '24px' }}>
-          <p style={{ margin: 0, color: '#475569' }}>
-            Please enter your Steadfast/Packzy tracking number to view real-time delivery status.
+        <div style={{
+          background: 'var(--bg-tertiary)', padding: '24px',
+          border: '1px solid var(--border-color)', marginBottom: '24px',
+        }}>
+          <p style={{ margin: 0, color: 'var(--text-tertiary)', fontSize: '0.9rem' }}>
+            Enter your Steadfast/Packzy tracking number to view real-time delivery status.
           </p>
           <div style={{ marginTop: '16px', display: 'flex', gap: '8px' }}>
             <input 
@@ -64,6 +59,7 @@ function TrackingView() {
             />
             <button 
               className="btn-primary"
+              style={{ whiteSpace: 'nowrap' }}
               onClick={() => {
                  const code = (document.getElementById('mcQuery') as HTMLInputElement).value;
                  if (code) handleFetch(code);
@@ -75,24 +71,31 @@ function TrackingView() {
         </div>
       )}
 
-      {loading && <p style={{ textAlign: 'center', padding: '24px' }}>Connecting to Courier...</p>}
+      {loading && <p style={{ textAlign: 'center', padding: '24px', color: 'var(--text-tertiary)' }}>Connecting to Courier...</p>}
       
-      {error && <div className={styles.errorBox}>{error}</div>}
+      {error && <div className={styles.error}>{error}</div>}
 
       {status && (
-        <div className={styles.card} style={{ borderTop: '4px solid #7c3aed' }}>
-          <h2 style={{ fontSize: '1.25rem', marginBottom: '16px' }}>Courier Status</h2>
+        <div style={{
+          background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+          padding: '24px', borderTop: '2px solid var(--text-primary)',
+        }}>
+          <h2 style={{
+            fontSize: '0.7rem', marginBottom: '16px', fontWeight: 700,
+            textTransform: 'uppercase', letterSpacing: '2px', color: 'var(--text-tertiary)',
+            fontFamily: 'var(--font-display)',
+          }}>Courier Status</h2>
           
-          <div style={{ background: '#f1f5f9', padding: '16px', borderRadius: '8px' }}>
+          <div style={{ background: 'var(--bg-tertiary)', padding: '16px', border: '1px solid var(--border-color)' }}>
              {typeof status === 'string' ? (
                <p style={{ margin: 0, fontWeight: 600 }}>{status}</p>
              ) : (
-               <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>
+               <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                  {JSON.stringify(status, null, 2)}
                </pre>
              )}
           </div>
-          <p style={{ color: '#94a3b8', fontSize: '12px', marginTop: '16px', textAlign: 'center' }}>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: '0.75rem', marginTop: '16px', textAlign: 'center' }}>
             Status updates are provided in real-time by Steadfast API.
           </p>
         </div>
@@ -104,7 +107,7 @@ function TrackingView() {
 export default function TrackPage() {
   return (
     <div className={styles.page}>
-      <Suspense fallback={<div style={{ textAlign: 'center', marginTop: '40px' }}>Loading...</div>}>
+      <Suspense fallback={<div style={{ textAlign: 'center', marginTop: '40px', color: 'var(--text-tertiary)' }}>Loading...</div>}>
          <TrackingView />
       </Suspense>
     </div>

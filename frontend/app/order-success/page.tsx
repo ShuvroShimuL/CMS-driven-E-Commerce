@@ -15,49 +15,47 @@ export default function OrderSuccessPage({
     <div className={styles.container}>
       <div className={styles.successMessage}>
         <div className={styles.successIcon}>{isBkash ? '📱' : '🎉'}</div>
-        <h1 style={{ marginBottom: '1rem' }}>
+        <h1 style={{ marginBottom: '1rem', fontFamily: 'var(--font-display)', letterSpacing: '-1px' }}>
           {isBkash ? 'Order Received!' : 'Order Confirmed!'}
         </h1>
         <p style={{ marginBottom: '1.5rem', color: 'var(--text-secondary)' }}>
           Thank you for shopping with us. Your Order ID is{' '}
-          <strong>#{orderId}</strong>.
+          <strong style={{ fontFamily: 'var(--font-display)' }}>#{orderId}</strong>.
         </p>
 
         {/* Coupon savings banner */}
         {couponCode && savedAmount > 0 && (
           <div style={{
-            background: '#f0fdf4',
-            border: '1px solid #bbf7d0',
-            borderRadius: '10px',
+            background: 'rgba(34,197,94,0.1)',
+            border: '1px solid rgba(34,197,94,0.3)',
             padding: '12px 20px',
             marginBottom: '1.5rem',
             maxWidth: '420px',
             margin: '0 auto 1.5rem',
           }}>
-            <p style={{ fontWeight: 600, color: '#16a34a', fontSize: '0.95rem' }}>
-              🎟️ Coupon "{couponCode}" applied — you saved Tk {savedAmount.toFixed(2)}!
+            <p style={{ fontWeight: 600, color: '#4ade80', fontSize: '0.9rem', margin: 0 }}>
+              🎟️ Coupon &quot;{couponCode}&quot; applied — you saved Tk {savedAmount.toFixed(2)}!
             </p>
           </div>
         )}
 
         {isBkash ? (
           <div style={{
-            background: '#fdf2f8',
-            border: '1px solid #f9a8d4',
-            borderRadius: '10px',
+            background: 'var(--bg-tertiary)',
+            border: '1px solid rgba(226,19,110,0.3)',
             padding: '16px 20px',
             marginBottom: '2rem',
             textAlign: 'left',
             maxWidth: '420px',
             margin: '0 auto 2rem',
           }}>
-            <p style={{ fontWeight: 600, color: '#e2136e', marginBottom: '8px' }}>
+            <p style={{ fontWeight: 600, color: '#e2136e', marginBottom: '8px', fontSize: '0.9rem' }}>
               ⏳ Payment Verification in Progress
             </p>
-            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              We've received your bKash transaction details.
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
+              We&apos;ve received your bKash transaction details.
               Our team will verify the payment and confirm your order shortly.
-              You'll receive a confirmation email once verified.
+              You&apos;ll receive a confirmation email once verified.
             </p>
           </div>
         ) : (

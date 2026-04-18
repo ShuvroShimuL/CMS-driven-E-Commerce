@@ -28,7 +28,7 @@
   text-align: center;
   padding: 4rem;
   background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
   color: var(--text-secondary);
   margin-bottom: 5rem;
 }
