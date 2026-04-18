@@ -1,5 +1,6 @@
 import { getCategoryBySlug, getProducts, getCategories } from '@/lib/api';
 import ProductCard from '@/components/ProductCard';
+import FilterBar from '@/components/FilterBar';
 import { getWishlistIds } from '@/app/actions/wishlist';
 import styles from './page.module.css';
 import type { Metadata } from 'next';
@@ -56,24 +57,42 @@ export async function generateMetadata({ params }: { params: { slug: string } })
     },
   };
 }
-export default async function CategoryPage({ params }: { params: { slug: string } }) {
+
+export default async function CategoryPage({ 
+  params,
+  searchParams 
+}: { 
+  params: { slug: string },
+  searchParams: { [key: string]: string | undefined }
+}) {
   const isAll = params.slug === 'all';
   let title = 'All Products';
   let products = [];
 
+  // Build API Query based on URL filters
+  const apiQuery: any = {
+    'pagination[limit]': 100, // Reasonable max for a category
+  };
+
+  if (searchParams.sort) {
+    apiQuery['sort'] = searchParams.sort; // e.g. price:asc
+  }
+  
+  if (searchParams.inStock === 'true') {
+    apiQuery['filters[stock][$gt]'] = 0;
+  }
+
   if (isAll) {
-    products = await getProducts();
+    products = await getProducts(apiQuery);
   } else {
+    // Filter heavily natively through Strapi
+    apiQuery['filters[category][slug][$eq]'] = params.slug;
+    
+    // Fetch title
     const category = await getCategoryBySlug(params.slug);
     if (category) {
       title = category.attributes.name;
-      // Strapi relation data is nested
-      const relatedProducts = category.attributes.products?.data || [];
-      // Re-map format so it behaves exactly like a root product endpoint
-      products = relatedProducts.map((p: any) => ({
-        id: p.id,
-        attributes: { ...p.attributes, category: { data: category } }
-      }));
+      products = await getProducts(apiQuery);
     } else {
       title = 'Category Not Found';
     }
@@ -93,10 +112,12 @@ export default async function CategoryPage({ params }: { params: { slug: string 
       </div>
 
       <div className="container">
+        <FilterBar />
+
         {products.length === 0 ? (
           <div className={styles.emptyState}>
             <h3>No products found</h3>
-            <p>We couldn't find any products in this category.</p>
+            <p>Try adjusting your filters or search terms.</p>
           </div>
         ) : (
           <div className={styles.productGrid}>

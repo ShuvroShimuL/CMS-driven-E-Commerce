@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { getCart } from '@/app/actions/cart';
 import { logoutUser } from '@/app/actions/auth';
+import SearchBar from './SearchBar';
 import styles from './Header.module.css';
 
 export default async function Header() {
@@ -33,10 +34,11 @@ export default async function Header() {
           <Link href="/"             className={styles.navLink}>Home</Link>
           <Link href="/category/all" className={styles.navLink}>Shop</Link>
           <Link href="/blog"         className={styles.navLink}>Blog</Link>
-          <Link href="/about"        className={styles.navLink}>About</Link>
+          <Link href="/#about"       className={styles.navLink}>About</Link>
         </nav>
 
         <div className={styles.actions}>
+          <SearchBar />
           {authUser ? (
             <>
               <div className={styles.profileMenu}>
