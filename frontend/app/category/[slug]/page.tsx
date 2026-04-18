@@ -11,10 +11,23 @@ export async function generateStaticParams() {
 }
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  const siteUrl = 'https://cms-driven-e-commerce.vercel.app';
+
   if (params.slug === 'all') {
     return {
       title: 'All Products',
       description: 'Browse our full catalog of premium products — electronics, fashion, lifestyle essentials. Fast delivery across Bangladesh.',
+      alternates: { canonical: `${siteUrl}/category/all` },
+      openGraph: {
+        title: 'All Products — Premium Store',
+        description: 'Browse our full catalog of premium products with fast delivery across Bangladesh.',
+        url: `${siteUrl}/category/all`,
+      },
+      twitter: {
+        card: 'summary',
+        title: 'All Products — Premium Store',
+        description: 'Browse our full catalog of premium products with fast delivery across Bangladesh.',
+      },
     };
   }
 
@@ -23,13 +36,22 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 
   const name = category.attributes.name;
   const count = category.attributes.products?.data?.length || 0;
+  const desc = `Shop ${count} premium ${name.toLowerCase()} products at Premium Store. Quality guaranteed with fast delivery.`;
+  const catUrl = `${siteUrl}/category/${params.slug}`;
 
   return {
     title: `${name}`,
-    description: `Shop ${count} premium ${name.toLowerCase()} products at Premium Store. Quality guaranteed with fast delivery.`,
+    description: desc,
+    alternates: { canonical: catUrl },
     openGraph: {
       title: `${name} — Premium Store`,
       description: `Explore ${count} curated ${name.toLowerCase()} products.`,
+      url: catUrl,
+    },
+    twitter: {
+      card: 'summary',
+      title: `${name} — Premium Store`,
+      description: desc,
     },
   };
 }

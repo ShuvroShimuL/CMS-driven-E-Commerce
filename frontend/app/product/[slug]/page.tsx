@@ -23,19 +23,22 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   const desc = description
     ? (typeof description === 'string' ? description : 'Premium quality product').slice(0, 155) + '…'
     : `Shop ${title} at Premium Store — ${categoryName}`;
+  const productUrl = `https://cms-driven-e-commerce.vercel.app/product/${params.slug}`;
 
   return {
     title: `${title} — Tk ${parseFloat(price).toFixed(2)}`,
     description: desc,
+    alternates: { canonical: productUrl },
     openGraph: {
       title: `${title} — Tk ${parseFloat(price).toFixed(2)}`,
       description: desc,
       type: 'website',
+      url: productUrl,
       ...(imageUrl && { images: [{ url: imageUrl, width: 800, height: 800, alt: title }] }),
     },
     twitter: {
       card: 'summary_large_image',
-      title,
+      title: `${title} — Tk ${parseFloat(price).toFixed(2)}`,
       description: desc,
       ...(imageUrl && { images: [imageUrl] }),
     },
