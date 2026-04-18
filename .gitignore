@@ -34,3 +34,6 @@ dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Private Documentation
+ADMIN_GUIDE_PRIVATE.md

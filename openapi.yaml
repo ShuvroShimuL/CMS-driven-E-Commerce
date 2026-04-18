@@ -1,63 +1,50 @@
 openapi: 3.0.3
 info:
-  title: Storefront API Contract
-  version: 1.0.0
-  description: API openapi specification between the Next.js Storefront and Strapi backend.
+  title: Premium Store API Architecture Contract
+  version: 2.0.0
+  description: Combined API specification detailing the dual-layer architecture (Strapi CMS Headless API + Commerce Express API Gateway) powering the Next.js Storefront.
 paths:
+  # ========================================================
+  # CMS DATA LAYER (STRAPI)
+  # ========================================================
   /api/products:
     get:
-      summary: Get all products
-      description: Returns a list of published products for the Product Listing Page (PLP).
+      summary: Retrieve all published products
+      description: Fetches products with relations (images, categories). Supports advanced filtering via query parameters.
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Product"
-  /api/products/{slug}:
-    get:
-      summary: Get a standard single product by slug
-      parameters:
-        - in: path
-          name: slug
-          required: true
-          schema:
-            type: string
-          description: The slug of the product
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    $ref: "#/components/schemas/Product"
+                $ref: "#/components/schemas/StrapiResponse"
   /api/categories:
     get:
-      summary: Get all categories
+      summary: Retrieve all product categories
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Category"
-  /api/orders:
+                $ref: "#/components/schemas/StrapiResponse"
+  /api/blog-posts:
+    get:
+      summary: Retrieve blog posts
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StrapiResponse"
+
+  # ========================================================
+  # COMMERCE GATEWAY LAYER (EXPRESS)
+  # ========================================================
+  /api/v1/auth/register:
     post:
-      summary: Create an Order (Cash on Delivery)
+      summary: User Registration
       requestBody:
         required: true
         content:
@@ -65,95 +52,112 @@ paths:
             schema:
               type: object
               properties:
-                data:
-                  type: object
-                  properties:
-                    fullName:
-                      type: string
-                    phone:
-                      type: string
-                    fullAddress:
-                      type: string
-                    division:
-                      type: string
-                    district:
-                      type: string
-                    thana:
-                      type: string
-                    cartItems:
-                      type: array
-                      items:
-                        type: object
-                        properties:
-                          productId:
-                            type: integer
-                          quantity:
-                            type: integer
+                email: { type: string }
+                password: { type: string }
+                fullName: { type: string }
       responses:
         "201":
-          description: Order created successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    $ref: "#/components/schemas/Order"
+          description: CREATED
+  /api/v1/auth/login:
+    post:
+      summary: User Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: OK with JWT token
+  /api/v1/checkout/bkash/create:
+    post:
+      summary: Initiate bKash Payment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { type: number }
+                cart_items: { type: array }
+                shipping_address: { type: object }
+      responses:
+        "200":
+          description: Returns paymentID and redirectURL
+  /api/v1/checkout/bkash/execute:
+    post:
+      summary: Execute bKash Payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                paymentID: { type: string }
+      responses:
+        "200":
+          description: Payment successful, Order generated in Strapi
+  /api/v1/wishlist:
+    get:
+      summary: Retrieve user mapped wishlist
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Returns array of wishlist items
+  /api/v1/wishlist/toggle:
+    post:
+      summary: Add or remove product from wishlist
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                product_strapi_id: { type: integer }
+      responses:
+        "200":
+          description: Toggled successfully
+  /api/v1/coupons/validate:
+    post:
+      summary: Validate a discount code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+                cart_total: { type: number }
+      responses:
+        "200":
+          description: Returns discount valid payload
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
-    Product:
+    StrapiResponse:
       type: object
       properties:
-        id:
-          type: integer
-        attributes:
+        data:
+          type: array
+          items:
+            type: object
+        meta:
           type: object
-          properties:
-            title:
-              type: string
-            slug:
-              type: string
-            description:
-              type: string
-            price:
-              type: number
-            stock:
-              type: integer
-            status:
-              type: string
-            images:
-              type: object
-            categories:
-              type: object
-            createdAt:
-              type: string
-              format: date-time
-    Category:
-      type: object
-      properties:
-        id:
-          type: integer
-        attributes:
-          type: object
-          properties:
-            name:
-              type: string
-            slug:
-              type: string
-    Order:
-      type: object
-      properties:
-        id:
-          type: integer
-        attributes:
-          type: object
-          properties:
-            orderNumber:
-              type: string
-            status:
-              type: string
-            totalAmount:
-              type: number
-            createdAt:
-              type: string
-              format: date-time
