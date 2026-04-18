@@ -100,3 +100,19 @@ export async function getBlogPostBySlug(slug: string) {
   });
   return res.data?.[0] || null;
 }
+
+// CMS Managed Pages & Collections
+export async function getHomepage() {
+  const res = await fetchAPI('/homepage', { populate: 'hero_image' });
+  return res.data || null;
+}
+
+export async function getTestimonials() {
+  const res = await fetchAPI('/testimonials', { sort: 'rating:desc' });
+  return res.data || [];
+}
+
+export async function getFaqs() {
+  const res = await fetchAPI('/faqs', { sort: 'sort_order:asc' });
+  return res.data || [];
+}

@@ -1,0 +1,112 @@
+{
+  "kind": "singleType",
+  "collectionName": "homepage",
+  "info": {
+    "singularName": "homepage",
+    "pluralName": "homepages",
+    "displayName": "Homepage",
+    "description": "Editable content for the storefront landing page"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "hero_badge": {
+      "type": "string",
+      "default": "Now Accepting Pre-Orders"
+    },
+    "hero_title": {
+      "type": "string",
+      "required": true,
+      "default": "Premium Essentials."
+    },
+    "hero_subtitle": {
+      "type": "text",
+      "required": true,
+      "default": "Hand-curated, quality-verified products for those who refuse to compromise. Secure founding member pricing before stock runs out."
+    },
+    "hero_cta_text": {
+      "type": "string",
+      "default": "Shop Collection"
+    },
+    "hero_cta_link": {
+      "type": "string",
+      "default": "/category/all"
+    },
+    "hero_image": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
+    },
+    "stat_customers": {
+      "type": "string",
+      "default": "2,847+"
+    },
+    "stat_rating": {
+      "type": "string",
+      "default": "4.9"
+    },
+    "stat_delivery": {
+      "type": "string",
+      "default": "24hr"
+    },
+    "marquee_items": {
+      "type": "json",
+      "default": ["Free Shipping Inside Dhaka", "24hr Fast Delivery", "Use Code WELCOME10", "Verified Reviews Only", "Secure bKash Checkout", "30-Day Returns"]
+    },
+    "value_prop_problem": {
+      "type": "text",
+      "default": "Most online stores overpromise and underdeliver."
+    },
+    "value_prop_answer": {
+      "type": "text",
+      "default": "We built Premium around what actually matters — hand-curated quality, 24-hour rapid shipping, and dedicated human support. Every product earns its place through rigorous testing. No fluff. No fillers. No compromises. Just products that work exactly as advertised."
+    },
+    "benefits": {
+      "type": "json",
+      "default": [
+        { "title": "Local Warranty", "desc": "Your purchase is protected. No overseas runaround, no fine print, no exceptions." },
+        { "title": "24hr Shipping", "desc": "Orders before 2 PM ship same day. Inside Dhaka delivery in under 24 hours." },
+        { "title": "Verified Reviews", "desc": "Real buyers, real results. Every review comes from a verified purchase only." },
+        { "title": "Secure Checkout", "desc": "256-bit encryption with bKash and COD support. Your data stays locked." },
+        { "title": "Human Support", "desc": "Real people, fast responses. No chatbots, no ticket queues, no runaround." },
+        { "title": "Easy Returns", "desc": "30-day no-questions-asked refund policy. Full protection on every order." }
+      ]
+    },
+    "offer_tag": {
+      "type": "string",
+      "default": "Limited Offer"
+    },
+    "offer_title": {
+      "type": "string",
+      "default": "10% Off Your First Order"
+    },
+    "offer_subtitle": {
+      "type": "text",
+      "default": "Use code at checkout. Founding price — once stock runs out, it's gone."
+    },
+    "offer_code": {
+      "type": "string",
+      "default": "WELCOME10"
+    },
+    "cta_title": {
+      "type": "string",
+      "default": "Founding Members Get:"
+    },
+    "cta_perks": {
+      "type": "json",
+      "default": [
+        "Founding price locked in forever",
+        "Priority same-day shipping",
+        "Early access to new drops",
+        "Direct line to our team"
+      ]
+    },
+    "cta_button_text": {
+      "type": "string",
+      "default": "Claim Your Founding Price →"
+    }
+  }
+}
