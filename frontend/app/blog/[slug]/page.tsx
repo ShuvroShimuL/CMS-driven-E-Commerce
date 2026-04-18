@@ -63,7 +63,7 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
     );
   }
 
-  const { title, body, excerpt, author, readTime, cover, tags, createdAt } = post.attributes;
+  const { title, body, excerpt, author, read_time, cover, tags, createdAt } = post.attributes;
   const coverUrl = cover?.data?.attributes?.url;
   const date = new Date(createdAt).toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
@@ -77,7 +77,7 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
       <div className={styles.articleMeta}>
         <span>{date}</span>
         <span>·</span>
-        <span>{readTime} min read</span>
+        <span>{read_time} min read</span>
         <span>·</span>
         <span>{author}</span>
       </div>

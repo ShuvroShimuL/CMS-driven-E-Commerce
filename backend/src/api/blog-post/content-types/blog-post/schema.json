@@ -42,10 +42,9 @@
       "required": true,
       "default": "Premium Store"
     },
-    "readTime": {
+    "read_time": {
       "type": "integer",
       "required": true,
-      "min": 1,
       "default": 5
     },
     "tags": {

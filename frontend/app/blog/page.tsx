@@ -32,7 +32,7 @@ export default async function BlogPage() {
         ) : (
           <div className={styles.postGrid}>
             {posts.map((post: any) => {
-              const { title, slug, excerpt, author, readTime, cover, createdAt } = post.attributes;
+              const { title, slug, excerpt, author, read_time, cover, createdAt } = post.attributes;
               const coverUrl = cover?.data?.attributes?.url;
               const date = new Date(createdAt).toLocaleDateString('en-US', {
                 year: 'numeric', month: 'short', day: 'numeric',
@@ -47,7 +47,7 @@ export default async function BlogPage() {
                     <div className={styles.postMeta}>
                       <span>{date}</span>
                       <span>·</span>
-                      <span>{readTime} min read</span>
+                      <span>{read_time} min read</span>
                       <span>·</span>
                       <span>{author}</span>
                     </div>
