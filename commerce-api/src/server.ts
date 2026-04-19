@@ -26,6 +26,7 @@ import { webhookRouter } from './webhookRoutes';
 import { couponRouter } from './couponRoutes';
 import { reviewRouter } from './reviewRoutes';
 import { wishlistRouter } from './wishlistRoutes';
+import { otpRouter } from './otpRoutes';
 import { cartLimiter } from './middleware';
 import { runMigrations } from './init';
 import './cron';
@@ -46,6 +47,7 @@ app.use('/api/v1/webhooks', webhookRouter);
 app.use('/api/v1/coupons', couponRouter);
 app.use('/api/v1/reviews', reviewRouter);
 app.use('/api/v1/wishlist', wishlistRouter);
+app.use('/api/v1/otp', otpRouter);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'active', service: 'commerce-api', sprint: 9 });

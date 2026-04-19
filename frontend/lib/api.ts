@@ -46,7 +46,12 @@ export async function fetchAPI(
 
     if (!response.ok) {
       console.error(`Strapi API Error (${response.status}):`, data);
-      throw new Error(`An error occurred please try again`);
+      const strapiError = data?.error;
+      const message = strapiError?.message || `Strapi API error: ${response.status}`;
+      const err = new Error(message) as any;
+      err.status = response.status;
+      err.details = strapiError?.details || {};
+      throw err;
     }
 
     return data;

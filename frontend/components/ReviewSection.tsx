@@ -113,8 +113,13 @@ export default function ReviewSection({ productId, productSlug }: {
     setSubmitting(true);
     setMessage(null);
 
-    // Get token from localStorage (set during login)
-    const token = localStorage.getItem('accessToken');
+    // Read access token from httpOnly cookie via API proxy
+    let token: string | null = null;
+    try {
+      const tokenRes = await fetch('/api/auth/token');
+      const tokenData = await tokenRes.json();
+      token = tokenData.token;
+    } catch {}
     if (!token) {
       setMessage({ type: 'error', text: 'Please log in to submit a review' });
       setSubmitting(false);
@@ -143,6 +148,8 @@ export default function ReviewSection({ productId, productSlug }: {
         setRating(0);
         setComment('');
         setShowForm(false);
+        // Refetch reviews to show updated list
+        await fetchReviews();
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to submit review' });
       }

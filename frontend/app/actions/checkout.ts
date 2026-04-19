@@ -6,9 +6,7 @@ import nodemailer from 'nodemailer';
 const ADMIN_EMAIL  = process.env.ADMIN_EMAIL || 'shamimrshimul0403@gmail.com';
 const GMAIL_USER   = process.env.GMAIL_USER || '';
 const GMAIL_PASS   = process.env.GMAIL_APP_PASSWORD || '';
-
-// ─── In-memory OTP store (TTL 5 min) ──────────────────────────────────────────
-const otpStore = new Map<string, { code: string; expires: number }>();
+const COMMERCE_API = process.env.COMMERCE_API_URL || 'http://localhost:4000/api/v1';
 
 function getTransporter() {
   return nodemailer.createTransport({
@@ -17,33 +15,18 @@ function getTransporter() {
   });
 }
 
-// ─── COD OTP: Send ────────────────────────────────────────────────────────────
-export async function sendCodOtp(email: string) {
+// ─── COD OTP: Send (Database-backed via Commerce API) ─────────────────────────
+export async function sendCodOtp(email: string, name?: string) {
   try {
-    if (!GMAIL_USER || !GMAIL_PASS) throw new Error('Email not configured');
-    
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(email.toLowerCase(), { code, expires: Date.now() + 5 * 60 * 1000 });
-
-    const transporter = getTransporter();
-    await transporter.sendMail({
-      from: `"Premium Store" <${GMAIL_USER}>`,
-      to: email,
-      subject: `${code} — Verify your COD order`,
-      html: `
-        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;background:#0a0a0a;color:#f5f5f5">
-          <h2 style="margin-bottom:8px">Confirm Your Order</h2>
-          <p style="color:#a0a0a0">Enter this code at checkout to verify your Cash on Delivery order.</p>
-          <div style="background:#1a1a1a;padding:24px;text-align:center;margin:24px 0;border:1px solid #222">
-            <span style="font-size:40px;font-weight:bold;letter-spacing:10px;color:#f5f5f5">${code}</span>
-          </div>
-          <p style="color:#666;font-size:13px">This code expires in <strong>5 minutes</strong>.</p>
-          <hr style="border:none;border-top:1px solid #222;margin:24px 0"/>
-          <p style="color:#444;font-size:12px">Premium Store · Powered by Antigravity</p>
-        </div>
-      `,
+    const res = await fetch(`${COMMERCE_API}/otp/send-cod`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name }),
     });
-
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || 'Failed to send verification code.' };
+    }
     return { success: true };
   } catch (err: any) {
     console.error('[COD OTP] Send failed:', err.message);
@@ -51,18 +34,19 @@ export async function sendCodOtp(email: string) {
   }
 }
 
-// ─── COD OTP: Verify ──────────────────────────────────────────────────────────
+// ─── COD OTP: Verify (Database-backed via Commerce API) ───────────────────────
 export async function verifyCodOtp(email: string, code: string) {
-  const entry = otpStore.get(email.toLowerCase());
-  if (!entry) return { success: false, error: 'No OTP found. Please request a new code.' };
-  if (Date.now() > entry.expires) {
-    otpStore.delete(email.toLowerCase());
-    return { success: false, error: 'Code expired. Please request a new one.' };
+  try {
+    const res = await fetch(`${COMMERCE_API}/otp/verify-cod`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code }),
+    });
+    const data = await res.json();
+    return { success: data.success, error: data.error };
+  } catch {
+    return { success: false, error: 'Verification failed. Please try again.' };
   }
-  if (entry.code !== code) return { success: false, error: 'Incorrect code.' };
-  
-  otpStore.delete(email.toLowerCase()); // one-time use
-  return { success: true };
 }
 
 // ─── Main Checkout ────────────────────────────────────────────────────────────

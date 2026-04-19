@@ -1,5 +1,5 @@
 // Bypass potentially corrupted FRONTEND_URL env var from user copy/paste
-const FRONTEND_URL = 'https://cms-driven-e-commerce.vercel.app';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://cms-driven-e-commerce.vercel.app';
 const JWT_SECRET   = process.env.JWT_SECRET   || '';
 const BREVO_KEY    = process.env.BREVO_API_KEY || '';
 const BREVO_SENDER = process.env.BREVO_SENDER_EMAIL || 'shamimrshimul0403@gmail.com';
@@ -115,14 +115,14 @@ export async function sendPaymentConfirmedEmail(
   to: string, name: string, orderId: string, items: any[], total: number
 ) {
   const itemList = items.map((i: any) =>
-    `<li>${i.title} × ${i.quantity} — $${(parseFloat(i.price) * i.quantity).toFixed(2)}</li>`
+    `<li>${i.title} × ${i.quantity} — Tk ${(parseFloat(i.price) * i.quantity).toFixed(2)}</li>`
   ).join('');
   await sendSystemEmail(to, name, `✅ Payment Confirmed #${orderId} — Premium Store`, `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
       <h2 style="color:#16a34a">✅ Payment Confirmed!</h2>
       <p>Hi <strong>${name}</strong>, your payment for order <strong>#${orderId}</strong> has been received.</p>
       <ul>${itemList}</ul>
-      <p><strong>Total: $${total.toFixed(2)}</strong></p>
+      <p><strong>Total: Tk ${total.toFixed(2)}</strong></p>
       <p>We are preparing your order for dispatch. Thank you for shopping with us!</p>
     </div>
   `);

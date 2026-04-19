@@ -51,12 +51,7 @@ export default async function ProductPage({ params }: { params: { slug: string }
   const product = await getProductBySlug(params.slug);
 
   if (!product) {
-    return (
-      <div className={`container ${styles.notFound}`}>
-        <h1>Product Not Found</h1>
-        <p>The product you are looking for does not exist or has been removed.</p>
-      </div>
-    );
+    notFound();
   }
 
   const { title, description, price, stock, category, images } = product.attributes;
