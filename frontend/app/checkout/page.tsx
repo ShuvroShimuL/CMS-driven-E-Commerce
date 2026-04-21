@@ -383,7 +383,7 @@ export default function CheckoutPage() {
                 }}>
                 {otpLoading ? 'Verifying...' : 'Verify & Place Order'}
               </button>
-              <button type="button" onClick={handleSendOtp} disabled={otpLoading}
+              <button type="button" onClick={() => { setOtpCode(''); setOtpError(null); handleSendOtp(); }} disabled={otpLoading}
                 style={{
                   width: '100%', marginTop: '8px', padding: '8px', background: 'none',
                   color: 'var(--text-tertiary)', border: 'none', cursor: 'pointer', fontSize: '0.8rem',
