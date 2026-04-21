@@ -470,20 +470,34 @@ async function decrementStrapiStock(strapiId: number, qty: number) {
 
     // Fetch current stock first
     const getRes = await fetch(`${STRAPI_URL}/api/products/${strapiId}`, { headers });
-    if (!getRes.ok) return;
+    if (!getRes.ok) {
+      const errText = await getRes.text();
+      console.error(`[Stock] Failed to fetch product ${strapiId}: ${getRes.status} ${errText}`);
+      await writeToDLQ('product_sync', { strapiId, qty, action: 'decrement' }, `Strapi GET failed: ${getRes.status}`);
+      return;
+    }
     const productData = await getRes.json();
     const currentStock = productData?.data?.attributes?.stock ?? 0;
     const newStock = Math.max(0, currentStock - qty);
 
     // Update stock
-    await fetch(`${STRAPI_URL}/api/products/${strapiId}`, {
+    const putRes = await fetch(`${STRAPI_URL}/api/products/${strapiId}`, {
       method: 'PUT',
       headers,
       body: JSON.stringify({ data: { stock: newStock } })
     });
+
+    if (!putRes.ok) {
+      const errText = await putRes.text();
+      console.error(`[Stock] Failed to update product ${strapiId}: ${putRes.status} ${errText}`);
+      await writeToDLQ('product_sync', { strapiId, qty, currentStock, newStock, action: 'decrement' }, `Strapi PUT failed: ${putRes.status} - likely missing 'update' permission on Product content type for the API token`);
+      return;
+    }
+
     console.log(`[Stock] Product ${strapiId} stock: ${currentStock} -> ${newStock}`);
   } catch (err: any) {
     console.error('[Stock] Could not update Strapi stock:', err.message);
+    await writeToDLQ('product_sync', { strapiId, qty, action: 'decrement' }, err.message);
   }
 }
 
