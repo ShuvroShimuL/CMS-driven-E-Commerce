@@ -201,7 +201,41 @@ router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) =
     client = await pool.connect();
     await client.query('BEGIN');
 
+    const STRAPI_URL = process.env.STRAPI_URL || 'https://cms-driven-e-commerce.onrender.com';
+    const STRAPI_TOKEN = process.env.STRAPI_API_TOKEN;
+
     for (const item of items) {
+      // Check if product exists in commerce_inventory
+      const existsRes = await client.query(
+        `SELECT available_qty FROM commerce_inventory WHERE strapi_id = $1`,
+        [item.id]
+      );
+
+      // Auto-sync from Strapi if missing or qty is 0
+      if (existsRes.rowCount === 0 || existsRes.rows[0].available_qty <= 0) {
+        const strapiHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (STRAPI_TOKEN) strapiHeaders['Authorization'] = `Bearer ${STRAPI_TOKEN}`;
+
+        const strapiRes = await fetch(`${STRAPI_URL}/api/products/${item.id}`, { headers: strapiHeaders });
+        if (strapiRes.ok) {
+          const productData = await strapiRes.json();
+          const attrs = productData?.data?.attributes;
+          if (attrs) {
+            const strapiStock = attrs.stock ?? 0;
+            const slug = attrs.slug || `product-${item.id}`;
+            const name = attrs.title || item.title || 'Unknown';
+            const price = parseFloat(attrs.price) || 0;
+
+            await client.query(`
+              INSERT INTO commerce_inventory (strapi_id, slug, name, price, available_qty, reserved_qty)
+              VALUES ($1, $2, $3, $4, $5, 0)
+              ON CONFLICT (strapi_id) DO UPDATE SET
+                available_qty = $5, name = $3, price = $4, slug = $2, updated_at = NOW()
+            `, [item.id, slug, name, price, strapiStock]);
+          }
+        }
+      }
+
       // PESSIMISTIC LOCK: SKIP LOCKED
       const lockRes = await client.query(`
         SELECT available_qty FROM commerce_inventory 
@@ -210,7 +244,7 @@ router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) =
       `, [item.id, item.quantity]);
 
       if (lockRes.rowCount === 0) {
-        throw new Error(`Product ${item.id} is out of stock or currently locked by another checkout.`);
+        throw new Error(`${item.title || 'Product ' + item.id} is out of stock or currently locked by another checkout.`);
       }
 
       await client.query(`
