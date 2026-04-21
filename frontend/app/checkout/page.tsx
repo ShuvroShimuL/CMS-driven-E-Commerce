@@ -52,13 +52,16 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     const d = district.trim().toLowerCase();
-    if (d === 'dhaka' || d === 'dhaka city') setShippingCost(60);
-    else if (d.length > 0) setShippingCost(120);
-    else setShippingCost(60);
-    if (discountAmount > 0) {
-      setDiscountAmount(0);
-      setCouponSuccess(null);
-      setCouponError('District changed — please re-apply coupon');
+    const newCost = (d === 'dhaka' || d === 'dhaka city') ? 60 : (d.length > 0 ? 120 : 60);
+    
+    // Only reset coupon if the shipping tier actually changed (Dhaka ↔ outside)
+    if (newCost !== shippingCost) {
+      setShippingCost(newCost);
+      if (discountAmount > 0) {
+        setDiscountAmount(0);
+        setCouponSuccess(null);
+        setCouponError('Shipping changed — please re-apply coupon');
+      }
     }
   }, [district]);
 
