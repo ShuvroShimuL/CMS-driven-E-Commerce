@@ -162,6 +162,61 @@ couponRouter.patch('/admin/:id/activate', adminApiKeyMiddleware, async (req, res
   }
 });
 
+// ─── PUT /admin/coupons/:id ──────────────────────────────────────────────────
+// Admin: Full update of coupon rules (value, limits, expiry, etc.)
+couponRouter.put('/admin/:id', adminApiKeyMiddleware, async (req, res) => {
+  const {
+    code, type, value,
+    min_order_amount, max_discount,
+    usage_limit, expires_at, is_active
+  } = req.body;
+
+  try {
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+
+    if (code !== undefined) { fields.push(`code = $${idx++}`); values.push(code.trim().toUpperCase()); }
+    if (type !== undefined) { fields.push(`type = $${idx++}`); values.push(type); }
+    if (value !== undefined) { fields.push(`value = $${idx++}`); values.push(parseFloat(value)); }
+    if (min_order_amount !== undefined) { fields.push(`min_order_amount = $${idx++}`); values.push(parseFloat(min_order_amount) || 0); }
+    if (max_discount !== undefined) { fields.push(`max_discount = $${idx++}`); values.push(max_discount ? parseFloat(max_discount) : null); }
+    if (usage_limit !== undefined) { fields.push(`usage_limit = $${idx++}`); values.push(usage_limit ? parseInt(usage_limit) : null); }
+    if (expires_at !== undefined) { fields.push(`expires_at = $${idx++}`); values.push(expires_at || null); }
+    if (is_active !== undefined) { fields.push(`is_active = $${idx++}`); values.push(!!is_active); }
+
+    if (fields.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    values.push(req.params.id);
+    const { rows } = await pool.query(
+      `UPDATE commerce_coupons SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
+      values
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Coupon not found' });
+    res.json({ success: true, coupon: rows[0] });
+  } catch (err: any) {
+    if (err.code === '23505') return res.status(409).json({ error: 'A coupon with this code already exists' });
+    console.error('[Coupon:Update]', err.message);
+    res.status(500).json({ error: 'Failed to update coupon' });
+  }
+});
+
+// ─── DELETE /admin/coupons/:id ────────────────────────────────────────────────
+// Admin: Permanently delete a coupon
+couponRouter.delete('/admin/:id', adminApiKeyMiddleware, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM commerce_coupons WHERE id = $1`, [req.params.id]
+    );
+    if (rowCount === 0) return res.status(404).json({ error: 'Coupon not found' });
+    res.json({ success: true, message: 'Coupon deleted' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DLQ Admin Endpoints
 // ─────────────────────────────────────────────────────────────────────────────
