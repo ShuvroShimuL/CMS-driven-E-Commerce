@@ -9,7 +9,7 @@ export function calculateDiscount(coupon: any, orderTotal: number): number {
   if (coupon.type === 'percentage') {
     const raw = (orderTotal * parseFloat(coupon.value)) / 100;
     // Cap at max_discount if set
-    return coupon.max_discount ? Math.min(raw, parseFloat(coupon.max_discount)) : raw;
+    return Math.max(0, Math.min(orderTotal, coupon.max_discount != null ? Math.min(raw, Number(coupon.max_discount)) : raw));
   }
   // Fixed: can't discount more than the order total
   return Math.min(parseFloat(coupon.value), orderTotal);
@@ -20,12 +20,12 @@ export function calculateDiscount(coupon: any, orderTotal: number): number {
 // Does NOT increment used_count — that only happens at order confirmation.
 couponRouter.post('/validate', authLimiter, async (req, res) => {
   const { code, orderTotal } = req.body;
-  if (!code || orderTotal == null) {
+  if (typeof code !== 'string' || !code.trim() || orderTotal == null) {
     return res.status(400).json({ error: 'code and orderTotal are required' });
   }
 
   const orderAmount = parseFloat(orderTotal);
-  if (isNaN(orderAmount) || orderAmount <= 0) {
+  if (!Number.isFinite(orderAmount) || orderAmount <= 0) {
     return res.status(400).json({ error: 'orderTotal must be a positive number' });
   }
 

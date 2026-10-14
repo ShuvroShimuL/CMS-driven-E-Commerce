@@ -5,7 +5,7 @@ export async function POST(req: Request) {
   try {
     const authHeader = req.headers.get('authorization');
     // Simple shared secret to prevent abuse (backend will pass JWT_SECRET)
-    if (authHeader !== `Bearer ${process.env.JWT_SECRET}`) {
+    if (!process.env.JWT_SECRET || authHeader !== `Bearer ${process.env.JWT_SECRET}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

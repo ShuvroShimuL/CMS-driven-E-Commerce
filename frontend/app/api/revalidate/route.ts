@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
   const secret = request.headers.get('Authorization');
   const configuredSecret = process.env.REVALIDATION_SECRET;
 
-  if (secret !== `Bearer ${configuredSecret}`) {
+  if (!configuredSecret || secret !== `Bearer ${configuredSecret}`) {
     return NextResponse.json({ message: 'Invalid token' }, { status: 401 });
   }
 

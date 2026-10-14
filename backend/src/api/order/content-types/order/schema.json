@@ -44,10 +44,23 @@
       "type": "decimal",
       "required": true
     },
+    "transaction_id": {
+      "type": "string",
+      "unique": true
+    },
+    "payment_method": {
+      "type": "enumeration",
+      "enum": ["cod", "bkash"],
+      "default": "cod"
+    },
+    "bkash_txn_id": {
+      "type": "string"
+    },
     "status": {
       "type": "enumeration",
       "enum": [
         "pending",
+        "pending_verification",
         "processing",
         "confirmed",
         "shipped",

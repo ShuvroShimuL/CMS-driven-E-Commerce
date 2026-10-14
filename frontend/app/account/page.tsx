@@ -32,7 +32,7 @@ async function getOrders(token: string) {
   });
   if (!res.ok) return [];
   const json = await res.json();
-  return json.orders?.data || [];
+  return Array.isArray(json.orders) ? json.orders : [];
 }
 
 export default async function AccountPage() {

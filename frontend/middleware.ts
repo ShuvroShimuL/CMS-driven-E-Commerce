@@ -14,10 +14,8 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // Prevent logged-in users from seeing login/register pages
-  if ((path === '/login' || path === '/register') && refreshToken) {
-    return NextResponse.redirect(new URL('/account', request.url));
-  }
+  // A refresh cookie can outlive the access token. Let users sign in again;
+  // redirecting them to /account here causes an endless /login <-> /account loop.
 
   return NextResponse.next();
 }

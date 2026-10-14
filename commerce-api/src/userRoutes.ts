@@ -20,7 +20,7 @@ function strapiHeaders(): Record<string, string> {
 }
 
 function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 // ─── POST /users/register ─────────────────────────────────────────────────────
@@ -78,14 +78,15 @@ userRouter.post('/verify-otp', otpLimiter, async (req, res) => {
   const client = await pool.connect();
   try {
     const { rows } = await client.query(
-      `SELECT id FROM commerce_otps
-       WHERE email = $1 AND otp_code = $2 AND used = false AND expires_at > NOW()
-       ORDER BY created_at DESC LIMIT 1`,
+      `UPDATE commerce_otps SET used = true
+       WHERE id = (
+         SELECT id FROM commerce_otps WHERE email = $1 AND purpose = 'account'
+         ORDER BY created_at DESC, id DESC LIMIT 1
+       ) AND otp_code = $2 AND used = false AND expires_at > NOW()
+       RETURNING id`,
       [email.toLowerCase(), otp]
     );
     if (rows.length === 0) return res.status(400).json({ error: 'Invalid or expired OTP' });
-
-    await client.query('UPDATE commerce_otps SET used = true WHERE id = $1', [rows[0].id]);
 
     const userRes = await client.query(
       'UPDATE commerce_users SET is_verified = true, updated_at = NOW() WHERE email = $1 RETURNING id, email, full_name, phone',
@@ -190,11 +191,15 @@ userRouter.post('/refresh', async (req, res) => {
   const tokenHash = hashToken(header.slice(7));
   const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     const { rows } = await client.query(
-      'SELECT id FROM commerce_refresh_tokens WHERE user_id = $1 AND token_hash = $2 AND expires_at > NOW()',
+      'SELECT id FROM commerce_refresh_tokens WHERE user_id = $1 AND token_hash = $2 AND expires_at > NOW() FOR UPDATE',
       [payload.id, tokenHash]
     );
-    if (rows.length === 0) return res.status(401).json({ error: 'Refresh token revoked or expired' });
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(401).json({ error: 'Refresh token revoked or expired' });
+    }
 
     await client.query('DELETE FROM commerce_refresh_tokens WHERE id = $1', [rows[0].id]);
 
@@ -208,8 +213,10 @@ userRouter.post('/refresh', async (req, res) => {
       [payload.id, newHash, newExpiry]
     );
 
+    await client.query('COMMIT');
     res.json({ accessToken: newAccess, refreshToken: newRefresh });
   } catch (err: any) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
   } finally { client.release(); }
 });
@@ -268,12 +275,17 @@ userRouter.post('/merge-cart', authMiddleware, async (req, res) => {
     );
     const savedSessionId = userRows[0]?.cart_session_id as string | null;
 
+    // Logging in again with the saved cart must not merge that cart into itself.
+    if (savedSessionId && guestSessionId === savedSessionId) {
+      return res.json({ success: true, newSessionId: savedSessionId });
+    }
+
     // Fetch guest cart items
     let guestItems: any[] = [];
     let guestCartId: number | null = null;
     if (guestSessionId) {
       const gRes = await fetch(
-        `${STRAPI_URL}/api/carts?filters[sessionId][$eq]=${guestSessionId}`,
+        `${STRAPI_URL}/api/carts?filters[sessionId][$eq]=${encodeURIComponent(guestSessionId)}`,
         { headers: strapiHeaders() }
       );
       if (gRes.ok) {
@@ -290,7 +302,7 @@ userRouter.post('/merge-cart', authMiddleware, async (req, res) => {
     let userItems: any[] = [];
     if (savedSessionId) {
       const uRes = await fetch(
-        `${STRAPI_URL}/api/carts?filters[sessionId][$eq]=${savedSessionId}`,
+        `${STRAPI_URL}/api/carts?filters[sessionId][$eq]=${encodeURIComponent(savedSessionId)}`,
         { headers: strapiHeaders() }
       );
       if (uRes.ok) {

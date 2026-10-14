@@ -33,6 +33,10 @@ import './cron';
 
 dotenv.config();
 
+for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) {
+  if (!process.env[key]) throw new Error(`${key} must be configured`);
+}
+
 const app = express();
 const port = process.env.PORT || 4000;
 

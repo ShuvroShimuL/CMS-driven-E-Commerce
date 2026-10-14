@@ -21,6 +21,10 @@ export async function runMigrations() {
       )
     `);
 
+    await client.query(`ALTER TABLE commerce_inventory ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
+    await client.query(`ALTER TABLE commerce_inventory ADD COLUMN IF NOT EXISTS pending_sync_qty INTEGER NOT NULL DEFAULT 0`);
+    await client.query(`ALTER TABLE commerce_inventory ADD COLUMN IF NOT EXISTS strapi_updated_at TIMESTAMPTZ`);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS commerce_transactions (
         id SERIAL PRIMARY KEY,
@@ -29,9 +33,23 @@ export async function runMigrations() {
         total_amount DECIMAL(10, 2) NOT NULL,
         cart_items JSONB NOT NULL,
         customer_info JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        expires_at TIMESTAMP
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMPTZ
       )
+    `);
+
+    // Earlier deployments stored UTC instants without a timezone. Preserve those
+    // instants while making expiry comparisons independent of the server's locale.
+    await client.query(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns
+          WHERE table_schema = current_schema() AND table_name = 'commerce_transactions'
+            AND column_name = 'expires_at' AND data_type = 'timestamp without time zone') THEN
+          ALTER TABLE commerce_transactions
+            ALTER COLUMN expires_at TYPE TIMESTAMPTZ USING expires_at AT TIME ZONE 'UTC',
+            ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+        END IF;
+      END $$
     `);
 
     // ── Sprint 6: User accounts ───────────────────────────────────────────────
@@ -69,6 +87,10 @@ export async function runMigrations() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+
+    // Account verification codes must never authorize checkout (or vice versa).
+    await client.query(`ALTER TABLE commerce_otps ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'account'`);
+    await client.query(`ALTER TABLE commerce_otps ADD COLUMN IF NOT EXISTS verification_token_hash TEXT`);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS commerce_password_resets (

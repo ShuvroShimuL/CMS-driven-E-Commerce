@@ -865,8 +865,13 @@ export interface ApiOrderOrder extends Schema.CollectionType {
     thana: Attribute.String;
     cartItems: Attribute.JSON & Attribute.Required;
     totalAmount: Attribute.Decimal & Attribute.Required;
+    transaction_id: Attribute.String & Attribute.Unique;
+    payment_method: Attribute.Enumeration<['cod', 'bkash']> & Attribute.DefaultTo<'cod'>;
+    bkash_txn_id: Attribute.String;
+    tracking_code: Attribute.String;
+    courier_status: Attribute.String;
     status: Attribute.Enumeration<
-      ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled']
+      ['pending', 'pending_verification', 'processing', 'confirmed', 'shipped', 'delivered', 'cancelled']
     > &
       Attribute.DefaultTo<'pending'>;
     createdAt: Attribute.DateTime;

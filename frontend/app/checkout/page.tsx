@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { processCheckout, sendCodOtp, verifyCodOtp } from '@/app/actions/checkout';
 import styles from './page.module.css';
@@ -27,6 +27,7 @@ export default function CheckoutPage() {
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError]     = useState<string | null>(null);
   const [otpSent, setOtpSent]       = useState(false);
+  const codVerification = useRef<{ email: string; token: string } | null>(null);
 
   // Coupon state
   const [couponCode, setCouponCode]         = useState('');
@@ -63,7 +64,7 @@ export default function CheckoutPage() {
         setCouponError('Shipping changed — please re-apply coupon');
       }
     }
-  }, [district]);
+  }, [district, shippingCost, discountAmount]);
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return;
@@ -112,6 +113,7 @@ export default function CheckoutPage() {
     setOtpLoading(true);
     setOtpError(null);
     setOtpEmail(email);
+    codVerification.current = null;
 
     const result = await sendCodOtp(email);
     if (result.success) {
@@ -129,14 +131,9 @@ export default function CheckoutPage() {
     setOtpError(null);
 
     const result = await verifyCodOtp(otpEmail, otpCode);
-    if (result.success) {
-      // OTP verified — now submit the actual form
-      if (formRef) {
-        const event = new Event('submit', { bubbles: true, cancelable: true });
-        // Set a flag so handleSubmit knows OTP is verified
-        formRef.dataset.otpVerified = 'true';
-        formRef.dispatchEvent(event);
-      }
+    if (result.success && result.verificationToken) {
+      codVerification.current = { email: otpEmail.trim().toLowerCase(), token: result.verificationToken };
+      formRef?.requestSubmit();
     } else {
       setOtpError(result.error || 'Invalid OTP');
     }
@@ -147,9 +144,15 @@ export default function CheckoutPage() {
     e.preventDefault();
     
     // If COD and OTP not yet verified, send OTP first
-    if (paymentMethod === 'cod' && !otpStep && e.currentTarget.dataset.otpVerified !== 'true') {
-      await handleSendOtp();
-      return;
+    const formData = new FormData(e.currentTarget);
+    if (paymentMethod === 'cod') {
+      const email = String(formData.get('email') || '').trim().toLowerCase();
+      if (!codVerification.current || codVerification.current.email !== email) {
+        if (!otpStep || otpEmail.trim().toLowerCase() !== email) await handleSendOtp();
+        else setOtpError('Verify the emailed code before placing your order.');
+        return;
+      }
+      formData.set('codVerificationToken', codVerification.current.token);
     }
 
     setLoading(true);
@@ -162,7 +165,6 @@ export default function CheckoutPage() {
       return;
     }
 
-    const formData = new FormData(e.currentTarget);
     formData.set('district', district);
     formData.set('paymentMethod', paymentMethod);
     if (paymentMethod === 'bkash') formData.set('bkashTxnId', bkashTxnId.trim());
@@ -172,9 +174,10 @@ export default function CheckoutPage() {
 
     if (result.success && result.orderId) {
       let successUrl = `/order-success?id=${(result.orderId as string).slice(0, 8).toUpperCase()}&method=${paymentMethod}`;
-      if (discountAmount > 0) successUrl += `&coupon=${couponCode.trim().toUpperCase()}&saved=${discountAmount.toFixed(2)}`;
+      if (result.discountAmount > 0) successUrl += `&coupon=${encodeURIComponent(result.coupon.code)}&saved=${result.discountAmount.toFixed(2)}`;
       router.replace(successUrl);
     } else {
+      codVerification.current = null;
       setError(result.error || 'Checkout failed. Please try again.');
       setLoading(false);
     }
@@ -393,7 +396,7 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {!otpStep && (
+          {(!otpStep || paymentMethod === 'bkash') && (
             <button type="submit" className={`btn-primary ${styles.submitBtn}`} disabled={loading || otpLoading}
               style={{
                 opacity: loading ? 0.7 : 1,

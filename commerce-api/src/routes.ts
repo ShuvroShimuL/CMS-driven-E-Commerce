@@ -1,8 +1,13 @@
 import { Router } from 'express';
 import { pool } from './db';
-import { v4 as uuidv4 } from 'uuid';
-import { adminApiKeyMiddleware, checkoutLimiter } from './middleware';
+import { randomUUID } from 'crypto';
+import { adminApiKeyMiddleware, checkoutLimiter, strapiWebhookMiddleware } from './middleware';
 import { writeToDLQ } from './dlq';
+import { validateCheckout, shippingCostFor, confirmationError } from './checkout';
+import { hashToken } from './auth';
+import { calculateDiscount } from './couponRoutes';
+import { releasePendingTransactions } from './reservations';
+import { syncInventoryProduct, decrementStrapiStock } from './inventory';
 
 const router = Router();
 
@@ -35,10 +40,9 @@ router.post('/admin/seed-inventory', adminApiKeyMiddleware, async (req, res) => 
         strapi_id = EXCLUDED.strapi_id,
         name = EXCLUDED.name,
         price = EXCLUDED.price,
-        available_qty = EXCLUDED.available_qty,
-        reserved_qty = 0,
+        available_qty = GREATEST(EXCLUDED.available_qty - commerce_inventory.reserved_qty - commerce_inventory.pending_sync_qty, 0),
         updated_at = CURRENT_TIMESTAMP
-    `, [strapi_id, slug, name || slug, price || 0, stock || 100]);
+    `, [strapi_id, slug, name || slug, price || 0, stock ?? 0]);
     res.json({ success: true, message: `Inventory seeded for strapi_id=${strapi_id}, slug=${slug}` });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -49,29 +53,11 @@ router.post('/admin/seed-inventory', adminApiKeyMiddleware, async (req, res) => 
 // Debug: Release all stuck PENDING reservations immediately
 // ----------------------------------------------------
 router.post('/admin/release-stuck', adminApiKeyMiddleware, async (req, res) => {
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    const { rows } = await client.query(`
-      SELECT id, cart_items FROM commerce_transactions WHERE status = 'PENDING'
-    `);
-    for (const tx of rows) {
-      for (const item of tx.cart_items) {
-        await client.query(`
-          UPDATE commerce_inventory
-          SET available_qty = available_qty + $2, reserved_qty = GREATEST(reserved_qty - $2, 0)
-          WHERE strapi_id = $1
-        `, [item.id, item.quantity]);
-      }
-      await client.query(`UPDATE commerce_transactions SET status = 'CANCELLED_TIMEOUT' WHERE id = $1`, [tx.id]);
-    }
-    await client.query('COMMIT');
+    const rows = await releasePendingTransactions('all');
     res.json({ success: true, released: rows.length });
   } catch (err: any) {
-    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
   }
 });
 
@@ -100,43 +86,25 @@ router.post('/admin/sync-from-strapi', adminApiKeyMiddleware, async (req, res) =
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (STRAPI_TOKEN) headers['Authorization'] = `Bearer ${STRAPI_TOKEN}`;
 
-    // Fetch all published products from Strapi
-    const strapiRes = await fetch(
-      `${STRAPI_URL}/api/products?pagination[pageSize]=100&publicationState=live`,
-      { headers }
-    );
-
-    if (!strapiRes.ok) {
-      const text = await strapiRes.text();
-      return res.status(502).json({ error: 'Strapi fetch failed', detail: text });
-    }
-
-    const { data } = await strapiRes.json();
-    if (!data || data.length === 0) {
-      return res.json({ success: true, synced: 0, message: 'No published products found in Strapi' });
-    }
-
     let synced = 0;
     const results: any[] = [];
-
-    for (const product of data) {
-      const strapi_id = product.id;
-      const { slug, title, price, stock } = product.attributes;
-
-      await pool.query(`
-        INSERT INTO commerce_inventory (strapi_id, slug, name, price, available_qty, reserved_qty)
-        VALUES ($1, $2, $3, $4, $5, 0)
-        ON CONFLICT (strapi_id) DO UPDATE SET
-          slug = EXCLUDED.slug,
-          name = EXCLUDED.name,
-          price = EXCLUDED.price,
-          available_qty = EXCLUDED.available_qty,
-          updated_at = CURRENT_TIMESTAMP
-      `, [strapi_id, slug, title, price || 0, stock || 0]);
-
-      results.push({ strapi_id, slug, name: title, price, stock });
-      synced++;
-    }
+    let page = 1;
+    let pageCount = 1;
+    do {
+      const response = await fetch(
+        `${STRAPI_URL}/api/products?pagination[pageSize]=100&pagination[page]=${page}&publicationState=live`,
+        { headers, signal: AbortSignal.timeout(15000) }
+      );
+      if (!response.ok) return res.status(502).json({ error: 'Strapi fetch failed' });
+      const { data, meta } = await response.json();
+      for (const product of data || []) {
+        await syncInventoryProduct({ ...product.attributes, id: product.id });
+        results.push({ strapi_id: product.id, slug: product.attributes.slug });
+        synced++;
+      }
+      pageCount = meta?.pagination?.pageCount || 1;
+      page++;
+    } while (page <= pageCount);
 
     res.json({ success: true, synced, products: results });
   } catch (err: any) {
@@ -148,7 +116,7 @@ router.post('/admin/sync-from-strapi', adminApiKeyMiddleware, async (req, res) =
 // ----------------------------------------------------
 // Strapi Product Sync Webhook (Sprint 5 Product Mirror)
 // ----------------------------------------------------
-router.post('/sync/product', async (req, res) => {
+router.post('/sync/product', strapiWebhookMiddleware, async (req, res) => {
   const { event, model, entry } = req.body;
 
   if (model !== 'product' || !entry) {
@@ -158,25 +126,16 @@ router.post('/sync/product', async (req, res) => {
   const { id: strapi_id, slug, title, price, stock, publishedAt } = entry;
 
   // We only sync published products natively
-  if (event === 'entry.unpublish' || !publishedAt) {
-    await pool.query('DELETE FROM commerce_inventory WHERE slug = $1', [slug]);
+  if (event === 'entry.unpublish' || event === 'entry.delete' || !publishedAt || entry.status === 'archived') {
+    await pool.query(`
+      UPDATE commerce_inventory SET is_active = FALSE, strapi_updated_at = COALESCE($2::timestamptz, NOW())
+      WHERE strapi_id = $1 AND (strapi_updated_at IS NULL OR strapi_updated_at <= COALESCE($2::timestamptz, NOW()))
+    `, [strapi_id, entry.updatedAt || null]);
     return res.json({ success: true, action: 'deleted' });
   }
 
   try {
-    const upsertQuery = `
-      INSERT INTO commerce_inventory (strapi_id, slug, name, price, available_qty)
-      VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (strapi_id) 
-      DO UPDATE SET 
-        slug = EXCLUDED.slug,
-        name = EXCLUDED.name,
-        price = EXCLUDED.price,
-        available_qty = EXCLUDED.available_qty,
-        updated_at = CURRENT_TIMESTAMP;
-    `;
-    
-    await pool.query(upsertQuery, [strapi_id, slug, title, price, stock || 0]);
+    await syncInventoryProduct(entry);
     res.json({ success: true, action: 'upserted' });
   } catch (error: any) {
     console.error('[ProductSync] Webhook upsert failed — writing to DLQ:', error.message);
@@ -191,15 +150,27 @@ router.post('/sync/product', async (req, res) => {
 // Initiate SSLCommerz Checkout & Pessimistic Lock
 // ----------------------------------------------------
 router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) => {
-  const { items, customer, subtotal, shippingCost, totalAmount, couponCode } = req.body;
-  const transaction_id = uuidv4();
+  const transaction_id = randomUUID();
 
   let client;
-  let lockAcquired = false;
 
   try {
+    const { items, customer, couponCode, codVerificationToken } = validateCheckout(req.body);
     client = await pool.connect();
     await client.query('BEGIN');
+
+    if (customer.paymentMethod === 'cod') {
+      const proof = await client.query(`
+        UPDATE commerce_otps SET verification_token_hash = NULL
+        WHERE email = $1 AND purpose = 'cod' AND used = TRUE
+          AND verification_token_hash = $2 AND expires_at > NOW()
+        RETURNING id
+      `, [customer.email, hashToken(codVerificationToken)]);
+      if (proof.rowCount !== 1) throw new Error('Email verification expired or already used. Request a new code');
+    }
+
+    const orderItems: any[] = [];
+    let subtotalCents = 0;
 
     const STRAPI_URL = process.env.STRAPI_URL || 'https://cms-driven-e-commerce.onrender.com';
     const STRAPI_TOKEN = process.env.STRAPI_API_TOKEN;
@@ -211,26 +182,26 @@ router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) =
         [item.id]
       );
 
-      // Auto-sync from Strapi if missing or qty is 0
-      if (existsRes.rowCount === 0 || existsRes.rows[0].available_qty <= 0) {
+      // Bootstrap only missing rows. Zero stock may be reserved or sold while
+      // the CMS still shows an older stock value.
+      if (existsRes.rowCount === 0) {
         const strapiHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
         if (STRAPI_TOKEN) strapiHeaders['Authorization'] = `Bearer ${STRAPI_TOKEN}`;
 
-        const strapiRes = await fetch(`${STRAPI_URL}/api/products/${item.id}`, { headers: strapiHeaders });
+        const strapiRes = await fetch(`${STRAPI_URL}/api/products/${item.id}`, { headers: strapiHeaders, signal: AbortSignal.timeout(15000) });
         if (strapiRes.ok) {
           const productData = await strapiRes.json();
           const attrs = productData?.data?.attributes;
-          if (attrs) {
+          if (attrs?.publishedAt && attrs.status !== 'archived') {
             const strapiStock = attrs.stock ?? 0;
             const slug = attrs.slug || `product-${item.id}`;
-            const name = attrs.title || item.title || 'Unknown';
+            const name = attrs.title || 'Unknown';
             const price = parseFloat(attrs.price) || 0;
 
             await client.query(`
               INSERT INTO commerce_inventory (strapi_id, slug, name, price, available_qty, reserved_qty)
               VALUES ($1, $2, $3, $4, $5, 0)
-              ON CONFLICT (strapi_id) DO UPDATE SET
-                available_qty = $5, name = $3, price = $4, slug = $2, updated_at = NOW()
+              ON CONFLICT (strapi_id) DO NOTHING
             `, [item.id, slug, name, price, strapiStock]);
           }
         }
@@ -238,14 +209,21 @@ router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) =
 
       // PESSIMISTIC LOCK: SKIP LOCKED
       const lockRes = await client.query(`
-        SELECT available_qty FROM commerce_inventory 
-        WHERE strapi_id = $1 AND available_qty >= $2 
+        SELECT available_qty, price, name, slug FROM commerce_inventory
+        WHERE strapi_id = $1 AND is_active = TRUE AND available_qty >= $2
         FOR UPDATE SKIP LOCKED
       `, [item.id, item.quantity]);
 
       if (lockRes.rowCount === 0) {
-        throw new Error(`${item.title || 'Product ' + item.id} is out of stock or currently locked by another checkout.`);
+        throw new Error(`Product ${item.id} is out of stock or currently locked by another checkout.`);
       }
+
+      const product = lockRes.rows[0];
+      const priceCents = Math.round(Number(product.price) * 100);
+      if (!Number.isSafeInteger(priceCents) || priceCents < 0) throw new Error('Invalid product price');
+      subtotalCents += priceCents * item.quantity;
+      if (!Number.isSafeInteger(subtotalCents) || subtotalCents > 9999999999) throw new Error('Order total exceeds the checkout limit');
+      orderItems.push({ id: item.id, quantity: item.quantity, price: priceCents / 100, title: product.name, slug: product.slug });
 
       await client.query(`
         UPDATE commerce_inventory 
@@ -255,7 +233,9 @@ router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) =
       `, [item.id, item.quantity]);
     }
 
-    lockAcquired = true;
+    const subtotal = subtotalCents / 100;
+    const shippingCost = shippingCostFor(customer.district);
+    const baseTotal = Math.round((subtotal + shippingCost) * 100) / 100;
 
     // ── Coupon validation (inside transaction so used_count is atomic) ────────
     let discountAmount = 0;
@@ -274,7 +254,6 @@ router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) =
       }
 
       const coupon = couponRows[0];
-      const baseTotal = totalAmount || subtotal;
 
       if (!coupon.is_active) {
         await client.query('ROLLBACK');
@@ -297,14 +276,7 @@ router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) =
       }
 
       // Calculate discount
-      if (coupon.type === 'percentage') {
-        const raw = (baseTotal * parseFloat(coupon.value)) / 100;
-        discountAmount = coupon.max_discount
-          ? Math.min(raw, parseFloat(coupon.max_discount))
-          : raw;
-      } else {
-        discountAmount = Math.min(parseFloat(coupon.value), baseTotal);
-      }
+      discountAmount = calculateDiscount(coupon, baseTotal);
       discountAmount = Math.round(discountAmount * 100) / 100;
 
       // Atomically increment used_count
@@ -316,27 +288,21 @@ router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) =
     }
 
     // Final total after discount
-    const baseTotal = totalAmount || subtotal;
-    const finalTotal = Math.max(0, baseTotal - discountAmount);
+    const finalTotal = Math.max(0, Math.round((baseTotal - discountAmount) * 100) / 100);
 
     // Set 15 minutes expiry to clear orphan reservations
-    const expiresAt = new Date(Date.now() + 15 * 60000);
-
-    const customerWithMeta = { ...customer, shippingCost, coupon: appliedCoupon, discountAmount };
+    const customerWithMeta = { ...customer, subtotal, shippingCost, coupon: appliedCoupon, discountAmount };
 
     await client.query(`
       INSERT INTO commerce_transactions (transaction_id, status, total_amount, cart_items, customer_info, expires_at)
-      VALUES ($1, 'PENDING', $2, $3, $4, $5)
-    `, [transaction_id, finalTotal, JSON.stringify(items), JSON.stringify(customerWithMeta), expiresAt]);
+      VALUES ($1, 'PENDING', $2, $3, $4, NOW() + INTERVAL '15 minutes')
+    `, [transaction_id, finalTotal, JSON.stringify(orderItems), JSON.stringify(customerWithMeta)]);
 
     await client.query('COMMIT');
 
-    // Simulate SSLCommerz Response (stub until live credentials)
-    const gatewayUrl = `https://sandbox.sslcommerz.com/mock_gateway/${transaction_id}`;
-
     res.json({
-      success: true, transaction_id, gatewayUrl,
-      discountAmount, finalTotal,
+      success: true, transaction_id,
+      items: orderItems, subtotal, shippingCost, discountAmount, finalTotal,
       coupon: appliedCoupon
     });
 
@@ -351,100 +317,10 @@ router.post('/payments/sslcommerz/initiate', checkoutLimiter, async (req, res) =
 // ----------------------------------------------------
 // SSLCommerz IPN Handler (Webhook Callback)
 // ----------------------------------------------------
-router.post('/payments/ipn/sslcommerz', async (req, res) => {
-  const { tran_id, status, val_id, amount } = req.body;
-
-  if (!tran_id) {
-    return res.status(400).send('Invalid IPN request');
-  }
-
-  const client = await pool.connect();
-  
-  try {
-    await client.query('BEGIN');
-
-    // 1. Fetch Transaction & Enforce Idempotency
-    const { rows } = await client.query(
-      'SELECT status, cart_items FROM commerce_transactions WHERE transaction_id = $1 FOR UPDATE',
-      [tran_id]
-    );
-
-    if (rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).send('Transaction not found');
-    }
-
-    const tx = rows[0];
-
-    // Idempotency: If already resolved, ignore it
-    if (tx.status !== 'PENDING') {
-      await client.query('ROLLBACK');
-      return res.status(200).send('Already processed');
-    }
-
-    if (status === 'VALID' || status === 'VALIDATED') {
-      // 2. Commit the Reserved Stock permanently
-      const items = tx.cart_items;
-      for (const item of items) {
-        await client.query(`
-          UPDATE commerce_inventory 
-          SET reserved_qty = reserved_qty - $2 
-          WHERE strapi_id = $1
-        `, [item.id, item.quantity]);
-      }
-
-      // Mark transaction as SUCCESS
-      await client.query(`
-        UPDATE commerce_transactions 
-        SET status = 'PAID'
-        WHERE transaction_id = $1
-      `, [tran_id]);
-
-      // Fetch the full transaction details to create the Strapi order
-      const { rows: txRows } = await client.query(
-        'SELECT * FROM commerce_transactions WHERE transaction_id = $1',
-        [tran_id]
-      );
-      const fullTx = txRows[0];
-
-      // Create order in Strapi for admin visibility
-      await createStrapiOrder(fullTx, items);
-
-      // Decrement Strapi stock for each sold item
-      for (const item of items) {
-        await decrementStrapiStock(item.id, item.quantity);
-      }
-      
-    } else {
-      // 3. Failed/Cancelled: Release Stock early
-      const items = tx.cart_items;
-      for (const item of items) {
-        await client.query(`
-          UPDATE commerce_inventory 
-          SET available_qty = available_qty + $2,
-              reserved_qty = reserved_qty - $2 
-          WHERE strapi_id = $1
-        `, [item.id, item.quantity]);
-      }
-
-      // Mark transaction as FAILED
-      await client.query(`
-        UPDATE commerce_transactions 
-        SET status = 'FAILED'
-        WHERE transaction_id = $1
-      `, [tran_id]);
-    }
-
-    await client.query('COMMIT');
-    res.status(200).send('IPN Handled');
-
-  } catch (err: any) {
-    await client.query('ROLLBACK');
-    console.error('IPN processing error:', err.message);
-    res.status(500).send('Internal Error');
-  } finally {
-    client.release();
-  }
+router.post('/payments/ipn/sslcommerz', (_req, res) => {
+  // Initiation is a local reservation, not a real SSLCommerz payment session.
+  // Never accept caller-supplied payment status until server validation exists.
+  res.status(503).json({ error: 'SSLCommerz payments are not configured' });
 });
 
 // =====================================================
@@ -464,9 +340,11 @@ async function createStrapiOrder(tx: any, items: any[]) {
       division: customer.division || '',
       district: customer.district || '',
       thana: customer.thana || '',
+      transaction_id: tx.transaction_id,
       cartItems: items,
       totalAmount: parseFloat(tx.total_amount),
       status: 'confirmed',
+      payment_method: 'cod',
     }
   };
 
@@ -482,56 +360,13 @@ async function createStrapiOrder(tx: any, items: any[]) {
 
     if (!res.ok) {
       const text = await res.text();
-      console.error('[Order] Strapi order creation failed:', text);
+      throw new Error(`Strapi order creation failed (${res.status}): ${text}`);
     } else {
       console.log('[Order] Strapi order created successfully');
     }
   } catch (err: any) {
-    console.error('[Order] Could not reach Strapi:', err.message);
-  }
-}
-
-// =====================================================
-// HELPER: Decrement Strapi product stock
-// =====================================================
-async function decrementStrapiStock(strapiId: number, qty: number) {
-  const STRAPI_URL = process.env.STRAPI_URL || 'https://cms-driven-e-commerce.onrender.com';
-  const STRAPI_TOKEN = process.env.STRAPI_API_TOKEN;
-
-  try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (STRAPI_TOKEN) headers['Authorization'] = `Bearer ${STRAPI_TOKEN}`;
-
-    // Fetch current stock first
-    const getRes = await fetch(`${STRAPI_URL}/api/products/${strapiId}`, { headers });
-    if (!getRes.ok) {
-      const errText = await getRes.text();
-      console.error(`[Stock] Failed to fetch product ${strapiId}: ${getRes.status} ${errText}`);
-      await writeToDLQ('product_sync', { strapiId, qty, action: 'decrement' }, `Strapi GET failed: ${getRes.status}`);
-      return;
-    }
-    const productData = await getRes.json();
-    const currentStock = productData?.data?.attributes?.stock ?? 0;
-    const newStock = Math.max(0, currentStock - qty);
-
-    // Update stock
-    const putRes = await fetch(`${STRAPI_URL}/api/products/${strapiId}`, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({ data: { stock: newStock } })
-    });
-
-    if (!putRes.ok) {
-      const errText = await putRes.text();
-      console.error(`[Stock] Failed to update product ${strapiId}: ${putRes.status} ${errText}`);
-      await writeToDLQ('product_sync', { strapiId, qty, currentStock, newStock, action: 'decrement' }, `Strapi PUT failed: ${putRes.status} - likely missing 'update' permission on Product content type for the API token`);
-      return;
-    }
-
-    console.log(`[Stock] Product ${strapiId} stock: ${currentStock} -> ${newStock}`);
-  } catch (err: any) {
-    console.error('[Stock] Could not update Strapi stock:', err.message);
-    await writeToDLQ('product_sync', { strapiId, qty, action: 'decrement' }, err.message);
+    console.error('[Order] Could not create Strapi order:', err.message);
+    await writeToDLQ('strapi_order_create', payload, err.message);
   }
 }
 
@@ -544,6 +379,7 @@ router.post('/payments/confirm-cod', checkoutLimiter, async (req, res) => {
   if (!transaction_id) return res.status(400).json({ error: 'transaction_id required' });
 
   const client = await pool.connect();
+  let released = false;
   try {
     await client.query('BEGIN');
 
@@ -558,9 +394,14 @@ router.post('/payments/confirm-cod', checkoutLimiter, async (req, res) => {
     }
 
     const tx = rows[0];
+    const invalid = confirmationError(tx, 'cod');
+    if (invalid) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: invalid });
+    }
     if (tx.status !== 'PENDING') {
       await client.query('ROLLBACK');
-      return res.status(200).json({ message: 'Already processed', status: tx.status });
+      return res.status(200).json({ success: true, message: 'Already processed', status: tx.status, transaction_id });
     }
 
     const items = tx.cart_items;
@@ -569,17 +410,20 @@ router.post('/payments/confirm-cod', checkoutLimiter, async (req, res) => {
     for (const item of items) {
       await client.query(`
         UPDATE commerce_inventory 
-        SET reserved_qty = GREATEST(reserved_qty - $2, 0)
+        SET reserved_qty = GREATEST(reserved_qty - $2, 0),
+            pending_sync_qty = pending_sync_qty + $2
         WHERE strapi_id = $1
       `, [item.id, item.quantity]);
     }
 
     await client.query(
-      `UPDATE commerce_transactions SET status = 'PAID' WHERE transaction_id = $1`,
+      `UPDATE commerce_transactions SET status = 'COD_CONFIRMED' WHERE transaction_id = $1`,
       [transaction_id]
     );
 
     await client.query('COMMIT');
+    client.release();
+    released = true;
 
     // Create Strapi order + decrement stock (outside DB transaction, best-effort)
     await createStrapiOrder(tx, items);
@@ -590,10 +434,10 @@ router.post('/payments/confirm-cod', checkoutLimiter, async (req, res) => {
     res.json({ success: true, message: 'COD order confirmed', transaction_id });
 
   } catch (err: any) {
-    await client.query('ROLLBACK');
+    if (!released) await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
   } finally {
-    client.release();
+    if (!released) client.release();
   }
 });
 
@@ -604,11 +448,12 @@ router.post('/payments/confirm-cod', checkoutLimiter, async (req, res) => {
 router.post('/payments/confirm-bkash', checkoutLimiter, async (req, res) => {
   const { transaction_id, bkash_txn_id } = req.body;
   if (!transaction_id) return res.status(400).json({ error: 'transaction_id required' });
-  if (!bkash_txn_id || bkash_txn_id.trim().length < 4) {
+  if (typeof bkash_txn_id !== 'string' || bkash_txn_id.trim().length < 4) {
     return res.status(400).json({ error: 'A valid bKash Transaction ID is required' });
   }
 
   const client = await pool.connect();
+  let released = false;
   try {
     await client.query('BEGIN');
 
@@ -623,9 +468,14 @@ router.post('/payments/confirm-bkash', checkoutLimiter, async (req, res) => {
     }
 
     const tx = rows[0];
+    const invalid = confirmationError(tx, 'bkash');
+    if (invalid) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: invalid });
+    }
     if (tx.status !== 'PENDING') {
       await client.query('ROLLBACK');
-      return res.status(200).json({ message: 'Already processed', status: tx.status });
+      return res.status(200).json({ success: true, message: 'Already processed', status: tx.status, transaction_id });
     }
 
     const items = tx.cart_items;
@@ -634,7 +484,8 @@ router.post('/payments/confirm-bkash', checkoutLimiter, async (req, res) => {
     for (const item of items) {
       await client.query(`
         UPDATE commerce_inventory 
-        SET reserved_qty = GREATEST(reserved_qty - $2, 0)
+        SET reserved_qty = GREATEST(reserved_qty - $2, 0),
+            pending_sync_qty = pending_sync_qty + $2
         WHERE strapi_id = $1
       `, [item.id, item.quantity]);
     }
@@ -654,6 +505,8 @@ router.post('/payments/confirm-bkash', checkoutLimiter, async (req, res) => {
     );
 
     await client.query('COMMIT');
+    client.release();
+    released = true;
 
     // Create Strapi order with bKash-specific fields
     const bkashTx = { ...tx, customer_info: updatedCustomerInfo };
@@ -670,10 +523,10 @@ router.post('/payments/confirm-bkash', checkoutLimiter, async (req, res) => {
     });
 
   } catch (err: any) {
-    await client.query('ROLLBACK');
+    if (!released) await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
   } finally {
-    client.release();
+    if (!released) client.release();
   }
 });
 
@@ -692,6 +545,7 @@ async function createStrapiOrderBkash(tx: any, items: any[], bkashTxnId: string)
       division: customer.division || '',
       district: customer.district || '',
       thana: customer.thana || '',
+      transaction_id: tx.transaction_id,
       cartItems: items,
       totalAmount: parseFloat(tx.total_amount),
       status: 'pending_verification',
@@ -712,12 +566,13 @@ async function createStrapiOrderBkash(tx: any, items: any[], bkashTxnId: string)
 
     if (!res.ok) {
       const text = await res.text();
-      console.error('[Order:bKash] Strapi order creation failed:', text);
+      throw new Error(`Strapi order creation failed (${res.status}): ${text}`);
     } else {
       console.log('[Order:bKash] Strapi order created — pending verification');
     }
   } catch (err: any) {
-    console.error('[Order:bKash] Could not reach Strapi:', err.message);
+    console.error('[Order:bKash] Could not create Strapi order:', err.message);
+    await writeToDLQ('strapi_order_create', payload, err.message);
   }
 }
 

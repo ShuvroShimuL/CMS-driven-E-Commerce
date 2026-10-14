@@ -43,7 +43,7 @@ export async function verifyCodOtp(email: string, code: string) {
       body: JSON.stringify({ email, code }),
     });
     const data = await res.json();
-    return { success: data.success, error: data.error };
+    return { success: res.ok && data.success, error: data.error, verificationToken: data.verificationToken };
   } catch {
     return { success: false, error: 'Verification failed. Please try again.' };
   }
@@ -53,20 +53,13 @@ export async function verifyCodOtp(email: string, code: string) {
 export async function processCheckout(formData: FormData) {
   try {
     const rawData = Object.fromEntries(formData.entries());
+    const codVerificationToken = rawData.codVerificationToken;
+    delete rawData.codVerificationToken;
     
     const cart = await getCart();
-    const items = cart?.attributes?.cartItems || [];
+    const cartItems = cart?.attributes?.cartItems || [];
 
-    if (items.length === 0) throw new Error("Cart is empty");
-
-    const subtotal = items.reduce(
-      (acc: number, item: any) => acc + (parseFloat(item.price) * item.quantity), 0
-    );
-
-    const district = (rawData.district as string || '').trim().toLowerCase();
-    const isDhaka = district === 'dhaka' || district === 'dhaka city';
-    const shippingCost = isDhaka ? 60 : 120;
-    const totalAmount = subtotal + shippingCost;
+    if (cartItems.length === 0) throw new Error("Cart is empty");
 
     const couponCode = (rawData.couponCode as string || '').trim().toUpperCase() || undefined;
     const paymentMethod = (rawData.paymentMethod as string) || 'cod';
@@ -78,7 +71,7 @@ export async function processCheckout(formData: FormData) {
     const initRes = await fetch(`${COMMERCE_API}/payments/sslcommerz/initiate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items, customer: rawData, subtotal, shippingCost, totalAmount, couponCode })
+      body: JSON.stringify({ items: cartItems, customer: rawData, couponCode, codVerificationToken })
     });
 
     if (!initRes.ok) {
@@ -93,7 +86,7 @@ export async function processCheckout(formData: FormData) {
       }
     }
 
-    const { transaction_id } = await initRes.json();
+    const { transaction_id, items, subtotal, shippingCost, discountAmount, finalTotal, coupon } = await initRes.json();
 
     // Step 2: Confirm payment
     let confirmUrl: string;
@@ -119,7 +112,9 @@ export async function processCheckout(formData: FormData) {
     }
 
     // Step 3: Clear the cart
-    await clearCart();
+    // The order is committed. A cart service outage must not invite a duplicate order.
+    try { await clearCart(); }
+    catch (error) { console.error('[Checkout] Could not clear the completed cart:', error); }
 
     const shortId = transaction_id.slice(0, 8).toUpperCase();
     const customerName = rawData.fullName as string || 'Customer';
@@ -128,11 +123,11 @@ export async function processCheckout(formData: FormData) {
     // Step 4: Send emails via Gmail
     const paymentLabel = paymentMethod === 'bkash' ? 'bKash' : 'Cash on Delivery';
     await Promise.allSettled([
-      sendCustomerEmail(customerEmail, customerName, shortId, items, subtotal, shippingCost, rawData, paymentLabel, bkashTxnId),
-      sendAdminEmail(customerName, customerEmail, shortId, items, subtotal, shippingCost, rawData, paymentLabel, bkashTxnId)
+      sendCustomerEmail(customerEmail, customerName, shortId, items, subtotal, shippingCost, rawData, paymentLabel, bkashTxnId, finalTotal),
+      sendAdminEmail(customerName, customerEmail, shortId, items, subtotal, shippingCost, rawData, paymentLabel, bkashTxnId, finalTotal)
     ]);
 
-    return { success: true, orderId: transaction_id };
+    return { success: true, orderId: transaction_id, discountAmount, finalTotal, coupon };
 
   } catch (err: any) {
     console.error("Checkout process failed:", err.message);
@@ -145,11 +140,10 @@ export async function processCheckout(formData: FormData) {
 async function sendCustomerEmail(
   email: string, name: string, orderId: string,
   items: any[], subtotal: number, shippingCost: number, customer: any,
-  paymentLabel: string, bkashTxnId: string
+  paymentLabel: string, bkashTxnId: string, total: number
 ) {
   if (!GMAIL_USER || !GMAIL_PASS || !email) return;
 
-  const total = subtotal + shippingCost;
   const itemRows = items.map((item: any) =>
     `<tr>
       <td style="padding:8px;border-bottom:1px solid #222;color:#f5f5f5">${item.title}</td>
@@ -207,11 +201,10 @@ async function sendCustomerEmail(
 async function sendAdminEmail(
   customerName: string, customerEmail: string, orderId: string,
   items: any[], subtotal: number, shippingCost: number, customer: any,
-  paymentLabel: string, bkashTxnId: string
+  paymentLabel: string, bkashTxnId: string, total: number
 ) {
   if (!GMAIL_USER || !GMAIL_PASS) return;
 
-  const total = subtotal + shippingCost;
   const isBkash = paymentLabel === 'bKash';
   const itemList = items.map((item: any) =>
     `<li>${item.title} × ${item.quantity} — Tk ${(parseFloat(item.price) * item.quantity).toFixed(2)}</li>`

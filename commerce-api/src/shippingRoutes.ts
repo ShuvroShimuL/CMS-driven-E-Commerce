@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { pool } from './db';
+import { shippingCostFor } from './checkout';
 
 export const shippingRouter = Router();
 
@@ -7,24 +7,14 @@ const STEADFAST_API_KEY    = process.env.STEADFAST_API_KEY || '';
 const STEADFAST_SECRET_KEY = process.env.STEADFAST_SECRET_KEY || '';
 const STEADFAST_BASE_URL   = process.env.STEADFAST_BASE_URL || 'https://portal.packzy.com/api/v1';
 
-const FALLBACK_SHIPPING_DHAKA   = parseInt(process.env.FALLBACK_SHIPPING_RATE_DHAKA || '60', 10);
-const FALLBACK_SHIPPING_OUTSIDE = parseInt(process.env.FALLBACK_SHIPPING_RATE_OUTSIDE || '120', 10);
-
-// Helper to determine if a district is inside Dhaka
-function isInsideDhaka(cityOrDistrict: string): boolean {
-  if (!cityOrDistrict) return false;
-  const match = cityOrDistrict.trim().toLowerCase();
-  return match === 'dhaka' || match === 'dhaka city';
-}
-
 // ─── GET /shipping/rates?district=... ───────────────────────────────────────────
 shippingRouter.get('/rates', async (req, res) => {
   try {
-    const district = req.query.district as string;
+    const district = typeof req.query.district === 'string' ? req.query.district : '';
     
     // In the future, if Steadfast provides a dynamic rate API, call it here.
     // For now, we use the fallback logic required by the user.
-    const cost = isInsideDhaka(district) ? FALLBACK_SHIPPING_DHAKA : FALLBACK_SHIPPING_OUTSIDE;
+    const cost = shippingCostFor(district);
     const provider = 'Steadfast (Fallback)';
 
     res.json({

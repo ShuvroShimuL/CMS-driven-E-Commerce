@@ -25,7 +25,7 @@ export async function getCart() {
 
   const response = await fetchAPI('/carts', {
     'filters[sessionId][$eq]': sessionId
-  }, { auth: false, cache: 'no-store' });
+  }, { auth: true, cache: 'no-store' });
 
   if (response?.data && response.data.length > 0) {
     return response.data[0];
@@ -56,7 +56,7 @@ export async function addToCart(productData: any) {
   if (!cart) {
     const newCartRes = await fetchAPI('/carts', {}, {
       method: 'POST',
-      auth: false,
+      auth: true,
       cache: 'no-store',
       body: {
         data: {
@@ -88,7 +88,7 @@ export async function addToCart(productData: any) {
   // Update Strapi Cart
   await fetchAPI(`/carts/${cart.id}`, {}, {
     method: 'PUT',
-    auth: false,
+    auth: true,
     cache: 'no-store',
     body: {
       data: {
@@ -110,7 +110,7 @@ export async function clearCart() {
 
   await fetchAPI(`/carts/${cart.id}`, {}, {
     method: 'PUT',
-    auth: false,
+    auth: true,
     cache: 'no-store',
     body: {
       data: {
@@ -142,7 +142,7 @@ export async function updateCartItemQuantity(productId: number, newQuantity: num
 
   await fetchAPI(`/carts/${cart.id}`, {}, {
     method: 'PUT',
-    auth: false,
+    auth: true,
     cache: 'no-store',
     body: { data: { cartItems: currentItems } }
   });

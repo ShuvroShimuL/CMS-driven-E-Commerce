@@ -30,7 +30,7 @@ graph TD
 
 - **Auth-Gated Cart & Wishlist:** Fully secure transactional architecture managed inside the Express DB layer.
 - **Dynamic SEO & Indexing:** 100% automated `sitemap.xml`, `robots.txt`, open-graph tags, and canonical loops using Strapi webhooks & Next.js dynamic metadata.
-- **bKash Native Checkout:** Tokenized, backend-verified payments preventing frontend manipulation.
+- **bKash Checkout:** Manual transaction-ID submission with administrator payment verification.
 - **Editorial CMS Design:** Fully customized Strapi admin styling and brand translations.
 - **Scalable Filter Engine:** Query-param-mapped product sorting, search, and stock filtration that runs completely Server-Side.
 - **Static Aggressive Caching:** Next.js Incremental Static Regeneration (ISR) ensures blazing fast LCP metrics, clearing caches automatically upon Strapi `publish` webhooks.
@@ -42,13 +42,18 @@ Below are the Environment Variable keys required. **Never commit the actual valu
 ### Next.js (`frontend/.env.local`)
 - `NEXT_PUBLIC_STRAPI_URL`
 - `NEXT_PUBLIC_COMMERCE_API_URL`
+- `COMMERCE_API_URL` (server actions; include `/api/v1`)
 - `STRAPI_API_TOKEN`
 - `REVALIDATION_SECRET`
+- `JWT_SECRET` (shared with the Commerce API mailer proxy)
 
 ### Express Gateway (`commerce-api/.env`)
 - `DATABASE_URL`
 - `PORT`
 - `ADMIN_API_KEY`
+- `JWT_SECRET`, `JWT_REFRESH_SECRET` (required; use distinct random values)
+- `STRAPI_URL`, `STRAPI_API_TOKEN`
+- `STRAPI_WEBHOOK_SECRET`
 - `BKASH_USERNAME`
 - `BKASH_PASSWORD`
 - `BKASH_APP_KEY`
@@ -58,15 +63,51 @@ Below are the Environment Variable keys required. **Never commit the actual valu
 - `HOST`, `PORT`, `APP_KEYS`, `API_TOKEN_SALT`, `ADMIN_JWT_SECRET`, `TRANSFER_TOKEN_SALT`
 - `DATABASE_URL`
 
+### Checkout and webhook deployment
+
+Deploy the CMS schema and Commerce API migrations together with the storefront.
+The Commerce API runs its idempotent migrations at startup. Existing transaction
+timestamps are interpreted as UTC during the timezone migration.
+
+Cart and order REST routes accept Strapi API tokens only, even if the Public role
+has permissions enabled. Configure server-side `STRAPI_API_TOKEN` values with the
+required Cart, Order and Product permissions. Never expose these tokens in browser
+environment variables.
+
+Configure Strapi product and order webhooks with the header
+`Authorization: Bearer <STRAPI_WEBHOOK_SECRET>`. Product events go to
+`/api/v1/sync/product`; order events go to `/api/v1/webhooks/strapi`.
+
+COD checkout requires the email-bound, single-use token returned by
+`/api/v1/otp/verify-cod`. bKash remains a **manual verification** workflow. The
+legacy SSLCommerz initiation URL creates a local inventory reservation; its IPN
+endpoint and reconciliation job are disabled until a real gateway validation
+integration is implemented. COD confirmation does not mark an order paid.
+
+Failed CMS order creation and stock updates are recorded in `commerce_dlq` for
+operator reconciliation. Inventory keeps unsynced sales unavailable until the
+CMS update is reconciled; inspect the CMS stock before retrying a decrement whose
+network response was lost. After manually completing a stock decrement, reduce
+the matching `pending_sync_qty` and sync the confirmed stock/version in the same
+database transaction. Do not merely mark the DLQ event resolved.
+
+The old maintenance scripts contained database and Strapi credentials. Rotate
+both exposed credentials before deployment; removing them from the working tree
+does not remove them from Git history. Scripts now require environment variables.
+
+### Local regression checks
+
+Run `npm test` in `commerce-api`. Tests use an isolated in-memory PostgreSQL
+engine and mocked CMS/email calls, with no production data or credentials.
+Run `npm run build` in `frontend` and `backend` for production build checks.
+
 ## 💳 Payment Architecture Security
 
-For maximum security, this project leverages an intermediary API gateway:
-
-1. Next.js creates the cart payload.
-2. The payload is offloaded to the Express Node.js gateway (`/api/v1/checkout/bkash/create`).
-3. Express generates a secure token and hits the bKash API using server-side hidden `APP_KEYS`.
-4. bKash returns the URL to Next.js.
-5. Post-completion, bKash hits back into Express (`/api/v1/checkout/bkash/execute`) which safely finalizes the logic and writes the secure Order to Strapi.
+The Commerce API calculates prices and shipping, reserves stock, and applies coupons.
+COD orders require server-verified email OTPs and remain unpaid until collection.
+bKash orders remain pending verification until an administrator checks the payment.
+Confirmed orders are mirrored to Strapi; integration failures are retained in the DLQ.
+The SSLCommerz payment callback is disabled pending a verified gateway integration.
 
 ## 🗺 Phase 4 Roadmap
 - **Traffic Elasticity:** Integrate Meilisearch locally to lift searching weight off Postgres.

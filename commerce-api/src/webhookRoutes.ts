@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { sendOrderShippedEmail } from './mailer';
 import { writeToDLQ } from './dlq';
+import { strapiWebhookMiddleware } from './middleware';
 
 export const webhookRouter = Router();
 
@@ -10,7 +11,7 @@ const STRAPI_TOKEN = process.env.STRAPI_API_TOKEN;
 const STEADFAST_API_KEY    = process.env.STEADFAST_API_KEY || '';
 const STEADFAST_SECRET_KEY = process.env.STEADFAST_SECRET_KEY || '';
 const STEADFAST_BASE_URL   = process.env.STEADFAST_BASE_URL || 'https://portal.packzy.com/api/v1';
-const FRONTEND_URL         = 'https://cms-driven-e-commerce.vercel.app';
+const FRONTEND_URL         = process.env.FRONTEND_URL || 'https://cms-driven-e-commerce.vercel.app';
 
 function strapiHeaders(): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -23,13 +24,13 @@ function strapiHeaders(): Record<string, string> {
 // DLQ failure scenarios:
 //   1. steadfast_parcel — Steadfast API returned non-OK or missing tracking_code
 //   2. strapi_order_patch — writing tracking_code back to Strapi failed
-webhookRouter.post('/strapi', async (req, res) => {
+webhookRouter.post('/strapi', strapiWebhookMiddleware, async (req, res) => {
   try {
     const { event, model, entry } = req.body;
 
-    if (model !== 'commerce-order' || !entry) {
+    if (model !== 'order' || !entry) {
        // Return 200 so Strapi doesn't retry irrelevant webhooks
-       return res.json({ success: true, message: 'Ignored: not a commerce-order' });
+       return res.json({ success: true, message: 'Ignored: not an order' });
     }
 
     if (event === 'entry.update') {
@@ -44,10 +45,10 @@ webhookRouter.post('/strapi', async (req, res) => {
             
             const sfPayload = {
               invoice: entry.id.toString(),
-              recipient_name: entry.customer_name || 'Customer',
+              recipient_name: entry.fullName || 'Customer',
               recipient_phone: entry.phone || '00000000000',
-              recipient_address: entry.shipping_address || 'Address not provided',
-              cod_amount: entry.total || 0,
+              recipient_address: [entry.fullAddress, entry.thana, entry.district, entry.division].filter(Boolean).join(', '),
+              cod_amount: entry.payment_method === 'bkash' ? 0 : Number(entry.totalAmount),
               note: `Order ${entry.id}`
             };
 
@@ -95,7 +96,7 @@ webhookRouter.post('/strapi', async (req, res) => {
           // ── 2. Update Strapi Order with the tracking code (if obtained) ───
           if (trackingCode) {
             try {
-              const patchRes = await fetch(`${STRAPI_URL}/api/commerce-orders/${entry.id}`, {
+              const patchRes = await fetch(`${STRAPI_URL}/api/orders/${entry.id}`, {
                 method: 'PUT',
                 headers: strapiHeaders(),
                 body: JSON.stringify({
@@ -130,12 +131,13 @@ webhookRouter.post('/strapi', async (req, res) => {
 
           // ── 3. Send Order Shipped Email ────────────────────────────────────
           // Sent regardless of courier success — customer still needs shipping notice
-          const codeToEmail = trackingCode || 'PENDING';
-          const trackingLink = `${FRONTEND_URL}/track?orderId=${entry.id}`;
+          if (!trackingCode) return res.json({ success: false, message: 'Courier creation did not complete' });
+          const codeToEmail = trackingCode;
+          const trackingLink = `${FRONTEND_URL}/track?trackingCode=${encodeURIComponent(trackingCode)}`;
           
           await sendOrderShippedEmail(
-             entry.customer_email || 'example@example.com',
-             entry.customer_name || 'Customer',
+             entry.email,
+             entry.fullName || 'Customer',
              entry.id.toString(),
              trackingLink,
              codeToEmail

@@ -2,6 +2,7 @@ import { pool } from './db';
 
 export type DLQEventType =
   | 'product_sync'       // Strapi → commerce_inventory upsert failed
+  | 'strapi_order_create' // Confirmed transaction not yet visible in the CMS
   | 'steadfast_parcel'   // Steadfast parcel creation failed
   | 'strapi_order_patch' // Failed to write tracking_code back to Strapi;
 

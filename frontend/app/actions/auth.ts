@@ -122,7 +122,7 @@ export async function loginUser(formData: FormData) {
 
     // Merge guest cart on login
     const guestSessionId = cookies().get(CART_COOKIE)?.value;
-    if (guestSessionId) {
+    {
       try {
         const mergeRes = await fetch(`${COMMERCE_API}/users/merge-cart`, {
           method: 'POST',
@@ -163,6 +163,7 @@ export async function logoutUser() {
   store.delete(ACCESS_COOKIE);
   store.delete(REFRESH_COOKIE);
   store.delete(USER_COOKIE);
+  store.delete(CART_COOKIE);
 }
 
 // ─── Forgot Password ──────────────────────────────────────────────────────────

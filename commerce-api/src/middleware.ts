@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit';
 import { Request, Response, NextFunction } from 'express';
+import { timingSafeEqual } from 'crypto';
 
 // ─── Admin API Key Middleware ──────────────────────────────────────────────────
 // Protects all /admin/* routes. Set ADMIN_API_KEY in Render env vars.
@@ -17,6 +18,19 @@ export function adminApiKeyMiddleware(req: Request, res: Response, next: NextFun
     return res.status(401).json({ error: 'Unauthorized: Invalid or missing admin API key' });
   }
 
+  next();
+}
+
+// Configure this header on both product and order webhooks in Strapi.
+export function strapiWebhookMiddleware(req: Request, res: Response, next: NextFunction) {
+  const secret = process.env.STRAPI_WEBHOOK_SECRET;
+  if (!secret) return res.status(503).json({ error: 'Strapi webhooks not configured' });
+  const supplied = req.get('authorization') || '';
+  const expected = `Bearer ${secret}`;
+  if (Buffer.byteLength(supplied) !== Buffer.byteLength(expected) ||
+      !timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) {
+    return res.status(401).json({ error: 'Invalid webhook credentials' });
+  }
   next();
 }
 

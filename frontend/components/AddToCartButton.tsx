@@ -26,7 +26,7 @@ export default function AddToCartButton({ product, isOutOfStock }: { product: an
       // Send them to cart route instead of a silent alert
       router.push('/cart');
     } catch (err) {
-      alert("Failed to add to cart. Please ensure Strapi is running and public permissions are set.");
+      alert("Could not add this item to your cart. Please try again.");
       console.error(err);
     } finally {
       setLoading(false);
