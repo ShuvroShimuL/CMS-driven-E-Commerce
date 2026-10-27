@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import sanitizeHtml from 'sanitize-html';
 import { getBlogPostBySlug, getBlogPosts } from '@/lib/api';
 import styles from '../blog.module.css';
 import type { Metadata } from 'next';
@@ -90,7 +91,11 @@ export default async function BlogPostPage({ params }: { params: { slug: string 
 
       <div
         className={styles.articleBody}
-        dangerouslySetInnerHTML={{ __html: body }}
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(body || '', {
+          allowedTags: ['p', 'br', 'h2', 'h3', 'h4', 'strong', 'em', 'blockquote', 'ul', 'ol', 'li', 'a', 'code', 'pre', 'hr'],
+          allowedAttributes: { a: ['href', 'title'] },
+          allowedSchemes: ['http', 'https', 'mailto'],
+        }) }}
       />
 
       {parsedTags.length > 0 && (

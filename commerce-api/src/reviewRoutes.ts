@@ -54,17 +54,13 @@ reviewRouter.post('/', authMiddleware, authLimiter, async (req, res) => {
   const user = (req as any).user as JWTPayload;
   const { productId, productSlug, rating, comment } = req.body;
 
-  // Validation
-  if (!productId || !productSlug || !rating || !comment) {
-    return res.status(400).json({ error: 'productId, productSlug, rating, and comment are required' });
+  if (!Number.isSafeInteger(productId) || productId <= 0 || productId > 2147483647 ||
+      typeof productSlug !== 'string' || !productSlug.trim() || productSlug.length > 255 ||
+      !Number.isInteger(rating) || rating < 1 || rating > 5 ||
+      typeof comment !== 'string' || comment.trim().length < 10 || comment.length > 5000) {
+    return res.status(400).json({ error: 'Provide a valid product, rating, and review (10–5000 characters)' });
   }
-  const ratingNum = parseInt(rating);
-  if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
-    return res.status(400).json({ error: 'rating must be between 1 and 5' });
-  }
-  if (comment.trim().length < 10) {
-    return res.status(400).json({ error: 'Comment must be at least 10 characters' });
-  }
+  const ratingNum = rating;
 
   try {
     // Fetch user's display name
@@ -159,6 +155,6 @@ reviewRouter.get('/my', authMiddleware, async (req, res) => {
     );
     res.json({ success: true, count: rows.length, reviews: rows });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });

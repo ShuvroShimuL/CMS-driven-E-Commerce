@@ -66,12 +66,18 @@ async function sendSystemEmail(to: string, toName: string, subject: string, html
   }
 }
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[char] as string));
+}
+
 // ─── OTP Verification Email ────────────────────────────────────────────────────
 export async function sendOTPEmail(to: string, otp: string, name: string = 'there') {
   await sendSystemEmail(to, name, `${otp} — Your Premium Store Verification Code`, `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px">
       <h2 style="color:#7c3aed;margin-bottom:8px">Verify your email</h2>
-      <p style="color:#444">Hi <strong>${name}</strong>,</p>
+      <p style="color:#444">Hi <strong>${escapeHtml(name)}</strong>,</p>
       <p style="color:#444">Enter the code below in the app to confirm your account.
       This code expires in <strong>10 minutes</strong>.</p>
       <div style="background:#f4f4f5;border-radius:8px;padding:24px;text-align:center;margin:24px 0">
@@ -89,11 +95,11 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string, name:
   await sendSystemEmail(to, name, 'Reset your Premium Store password', `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px">
       <h2 style="color:#7c3aed;margin-bottom:8px">Reset your password</h2>
-      <p style="color:#444">Hi <strong>${name}</strong>,</p>
+      <p style="color:#444">Hi <strong>${escapeHtml(name)}</strong>,</p>
       <p style="color:#444">We received a request to reset your password.
       Click the button below — this link expires in <strong>1 hour</strong>.</p>
       <div style="text-align:center;margin:32px 0">
-        <a href="${resetUrl}"
+        <a href="${escapeHtml(resetUrl)}"
            style="background:#7c3aed;color:#fff;padding:14px 32px;border-radius:8px;
                   text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">
           Reset Password
@@ -101,7 +107,7 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string, name:
       </div>
       <p style="color:#666;font-size:13px">
         If the button doesn't work, copy this link:<br/>
-        <a href="${resetUrl}" style="color:#7c3aed;word-break:break-all">${resetUrl}</a>
+        <a href="${escapeHtml(resetUrl)}" style="color:#7c3aed;word-break:break-all">${escapeHtml(resetUrl)}</a>
       </p>
       <p style="color:#666;font-size:13px">If you didn't request this, you can safely ignore this email.</p>
       <hr style="border:none;border-top:1px solid #eee;margin:24px 0"/>
@@ -115,12 +121,12 @@ export async function sendPaymentConfirmedEmail(
   to: string, name: string, orderId: string, items: any[], total: number
 ) {
   const itemList = items.map((i: any) =>
-    `<li>${i.title} × ${i.quantity} — Tk ${(parseFloat(i.price) * i.quantity).toFixed(2)}</li>`
+    `<li>${escapeHtml(i.title)} × ${i.quantity} — Tk ${(parseFloat(i.price) * i.quantity).toFixed(2)}</li>`
   ).join('');
   await sendSystemEmail(to, name, `✅ Payment Confirmed #${orderId} — Premium Store`, `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
       <h2 style="color:#16a34a">✅ Payment Confirmed!</h2>
-      <p>Hi <strong>${name}</strong>, your payment for order <strong>#${orderId}</strong> has been received.</p>
+      <p>Hi <strong>${escapeHtml(name)}</strong>, your payment for order <strong>#${escapeHtml(orderId)}</strong> has been received.</p>
       <ul>${itemList}</ul>
       <p><strong>Total: Tk ${total.toFixed(2)}</strong></p>
       <p>We are preparing your order for dispatch. Thank you for shopping with us!</p>
@@ -135,10 +141,10 @@ export async function sendPaymentFailedEmail(
   await sendSystemEmail(to, name, `❌ Payment Failed #${orderId} — Please Retry`, `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
       <h2 style="color:#dc2626">❌ Payment Failed</h2>
-      <p>Hi <strong>${name}</strong>, unfortunately your payment for order <strong>#${orderId}</strong> was not successful.</p>
+      <p>Hi <strong>${escapeHtml(name)}</strong>, unfortunately your payment for order <strong>#${escapeHtml(orderId)}</strong> was not successful.</p>
       <p>Please retry by clicking the button below:</p>
       <div style="text-align:center;margin:24px 0">
-        <a href="${retryUrl}" style="background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">
+        <a href="${escapeHtml(retryUrl)}" style="background:#7c3aed;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold">
           Retry Payment
         </a>
       </div>
@@ -153,8 +159,8 @@ export async function sendOrderCancelledEmail(
   await sendSystemEmail(to, name, `Order #${orderId} Cancelled — Premium Store`, `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
       <h2 style="color:#dc2626">Order Cancelled</h2>
-      <p>Hi <strong>${name}</strong>,</p>
-      <p>Your order <strong>#${orderId}</strong> has been automatically cancelled because
+      <p>Hi <strong>${escapeHtml(name)}</strong>,</p>
+      <p>Your order <strong>#${escapeHtml(orderId)}</strong> has been automatically cancelled because
          payment was not completed within 24 hours.</p>
       <p>Any reserved stock has been released. You are welcome to place a new order anytime.</p>
       <div style="text-align:center;margin:24px 0">
@@ -174,8 +180,8 @@ export async function sendOrderShippedEmail(
   await sendSystemEmail(to, name, `🚚 Your Order #${orderId} is on the way!`, `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
       <h2 style="color:#7c3aed">🚚 It's on its way!</h2>
-      <p>Hi <strong>${name}</strong>, your order <strong>#${orderId}</strong> has been shipped via Steadfast Courier.</p>
-      <p>Your Tracking Code: <strong>${trackingCode}</strong></p>
+      <p>Hi <strong>${escapeHtml(name)}</strong>, your order <strong>#${escapeHtml(orderId)}</strong> has been shipped via Steadfast Courier.</p>
+      <p>Your Tracking Code: <strong>${escapeHtml(trackingCode)}</strong></p>
       <div style="text-align:center;margin:32px 0">
         <a href="${FRONTEND_URL}/track?trackingCode=${encodeURIComponent(trackingCode)}" style="background:#7c3aed;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">
           Track Package
@@ -193,7 +199,7 @@ export async function sendOrderDeliveredEmail(
   await sendSystemEmail(to, name, `📦 Package Delivered - Order #${orderId}`, `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
       <h2 style="color:#16a34a">📦 Delivered!</h2>
-      <p>Hi <strong>${name}</strong>, your order <strong>#${orderId}</strong> has been successfully delivered by Steadfast Courier.</p>
+      <p>Hi <strong>${escapeHtml(name)}</strong>, your order <strong>#${escapeHtml(orderId)}</strong> has been successfully delivered by Steadfast Courier.</p>
       <p>Thank you for shopping at Premium Store. We hope to see you again soon!</p>
       <div style="text-align:center;margin:32px 0">
         <a href="${FRONTEND_URL}/shop" style="background:#7c3aed;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block">

@@ -6,6 +6,9 @@ import SearchBar from './SearchBar';
 import styles from './Header.module.css';
 
 export default async function Header() {
+  // Read request cookies outside error handlers so Next.js marks this layout dynamic.
+  const cookieStore = cookies();
+
   // Cart count
   let items: any[] = [];
   try {
@@ -19,7 +22,7 @@ export default async function Header() {
   // Auth state (from non-httpOnly auth_user cookie set on login)
   let authUser: { id: number; email: string; full_name: string } | null = null;
   try {
-    const userCookie = cookies().get('auth_user')?.value;
+    const userCookie = cookieStore.get('auth_user')?.value;
     if (userCookie) authUser = JSON.parse(userCookie);
   } catch {}
 

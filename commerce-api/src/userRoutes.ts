@@ -26,28 +26,28 @@ function generateOTP(): string {
 // ─── POST /users/register ─────────────────────────────────────────────────────
 userRouter.post('/register', authLimiter, async (req, res) => {
   const { email, password, full_name, phone } = req.body;
-  if (!email || !password || !full_name)
+  if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || typeof password !== 'string' || Buffer.byteLength(password, 'utf8') > 72 || typeof full_name !== 'string' || !full_name.trim() || full_name.length > 200 || (phone != null && (typeof phone !== 'string' || phone.length > 50)))
     return res.status(400).json({ error: 'email, password and full_name are required' });
   if (password.length < 8)
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
 
   const client = await pool.connect();
   try {
-    const existing = await client.query(
-      'SELECT id, is_verified FROM commerce_users WHERE email = $1',
-      [email.toLowerCase()]
+    await client.query('BEGIN');
+    const password_hash = await bcrypt.hash(password, 12);
+    // The conditional upsert locks the account while replacing any unverified
+    // registration, so a pre-registration cannot retain someone else's password.
+    const account = await client.query(
+      `INSERT INTO commerce_users (email, password_hash, full_name, phone)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash,
+         full_name = EXCLUDED.full_name, phone = EXCLUDED.phone, updated_at = NOW()
+       WHERE commerce_users.is_verified = false RETURNING id`,
+      [email.toLowerCase(), password_hash, full_name, phone || null]
     );
-
-    if (existing.rows.length > 0 && existing.rows[0].is_verified) {
+    if (!account.rows.length) {
+      await client.query('ROLLBACK');
       return res.status(409).json({ error: 'An account with this email already exists' });
-    }
-
-    if (existing.rows.length === 0) {
-      const password_hash = await bcrypt.hash(password, 12);
-      await client.query(
-        'INSERT INTO commerce_users (email, password_hash, full_name, phone) VALUES ($1, $2, $3, $4)',
-        [email.toLowerCase(), password_hash, full_name, phone || null]
-      );
     }
 
     const otp = generateOTP();
@@ -57,6 +57,8 @@ userRouter.post('/register', authLimiter, async (req, res) => {
       [email.toLowerCase(), otp, otpExpiry]
     );
 
+    await client.query('COMMIT');
+
     // Send OTP non-blocking — Gmail failure must NOT fail the registration
     sendOTPEmail(email, otp, full_name).catch(emailErr =>
       console.error('[Register] Gmail OTP send failed (non-fatal):', emailErr.message)
@@ -64,19 +66,28 @@ userRouter.post('/register', authLimiter, async (req, res) => {
 
     res.json({ success: true, message: 'OTP sent. Please check your email.' });
   } catch (err: any) {
-    // Expose real DB error detail so we can diagnose (table missing, etc.)
+    await client.query('ROLLBACK');
     console.error('[Register] DB error:', err.message);
-    res.status(500).json({ error: 'Registration failed', detail: err.message });
+    res.status(500).json({ error: 'Registration failed' });
   } finally { client.release(); }
 });
 
 // ─── POST /users/verify-otp ───────────────────────────────────────────────────
 userRouter.post('/verify-otp', otpLimiter, async (req, res) => {
-  const { email, otp } = req.body;
-  if (!email || !otp) return res.status(400).json({ error: 'email and otp are required' });
+  const { email, otp, password } = req.body;
+  if (typeof email !== 'string' || email.length > 254 || typeof otp !== 'string' || !/^\d{6}$/.test(otp) || typeof password !== 'string' || Buffer.byteLength(password, 'utf8') > 72) return res.status(400).json({ error: 'Email, password and a six-digit code are required' });
 
   const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+    const account = await client.query(
+      'SELECT id, password_hash FROM commerce_users WHERE email = $1 AND is_verified = false FOR UPDATE',
+      [email.toLowerCase()]
+    );
+    if (!account.rows.length || !(await bcrypt.compare(password, account.rows[0].password_hash))) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Invalid code or password' });
+    }
     const { rows } = await client.query(
       `UPDATE commerce_otps SET used = true
        WHERE id = (
@@ -86,13 +97,19 @@ userRouter.post('/verify-otp', otpLimiter, async (req, res) => {
        RETURNING id`,
       [email.toLowerCase(), otp]
     );
-    if (rows.length === 0) return res.status(400).json({ error: 'Invalid or expired OTP' });
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Invalid or expired OTP' });
+    }
 
     const userRes = await client.query(
       'UPDATE commerce_users SET is_verified = true, updated_at = NOW() WHERE email = $1 RETURNING id, email, full_name, phone',
       [email.toLowerCase()]
     );
-    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (userRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     const user = userRes.rows[0];
     const accessToken  = signAccessToken(user.id, user.email);
@@ -105,8 +122,10 @@ userRouter.post('/verify-otp', otpLimiter, async (req, res) => {
       [user.id, tokenHash, refreshExpiry]
     );
 
+    await client.query('COMMIT');
     res.json({ success: true, accessToken, refreshToken, user });
   } catch (err: any) {
+    await client.query('ROLLBACK');
     console.error('[VerifyOTP]', err.message);
     res.status(500).json({ error: 'Verification failed' });
   } finally { client.release(); }
@@ -115,12 +134,12 @@ userRouter.post('/verify-otp', otpLimiter, async (req, res) => {
 // ─── POST /users/resend-otp ───────────────────────────────────────────────────
 userRouter.post('/resend-otp', otpLimiter, async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ error: 'email is required' });
+  if (typeof email !== 'string' || email.length > 254) return res.status(400).json({ error: 'email is required' });
 
   const client = await pool.connect();
   try {
     const { rows } = await client.query(
-      'SELECT full_name FROM commerce_users WHERE email = $1',
+      'SELECT full_name FROM commerce_users WHERE email = $1 AND is_verified = false',
       [email.toLowerCase()]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'No account found with this email' });
@@ -134,14 +153,14 @@ userRouter.post('/resend-otp', otpLimiter, async (req, res) => {
     await sendOTPEmail(email, otp, rows[0].full_name);
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   } finally { client.release(); }
 });
 
 // ─── POST /users/login ────────────────────────────────────────────────────────
 userRouter.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
+  if (typeof email !== 'string' || typeof password !== 'string' || email.length > 254 || Buffer.byteLength(password, 'utf8') > 72) return res.status(400).json({ error: 'email and password are required' });
 
   const client = await pool.connect();
   try {
@@ -152,11 +171,10 @@ userRouter.post('/login', authLimiter, async (req, res) => {
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid email or password' });
 
     const user = rows[0];
-    if (!user.is_verified)
-      return res.status(403).json({ error: 'Please verify your email before logging in', needsVerification: true, email: user.email });
-
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Invalid email or password' });
+    if (!user.is_verified)
+      return res.status(403).json({ error: 'Please verify your email before logging in', needsVerification: true, email: user.email });
 
     const accessToken  = signAccessToken(user.id, user.email);
     const refreshToken = signRefreshToken(user.id, user.email);
@@ -217,7 +235,7 @@ userRouter.post('/refresh', async (req, res) => {
     res.json({ accessToken: newAccess, refreshToken: newRefresh });
   } catch (err: any) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   } finally { client.release(); }
 });
 
@@ -228,7 +246,7 @@ userRouter.post('/logout', authMiddleware, async (req, res) => {
   try {
     await client.query('DELETE FROM commerce_refresh_tokens WHERE user_id = $1', [user.id]);
     res.json({ success: true });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { console.error('[API]', err); res.status(500).json({ error: 'Internal server error' }); }
   finally { client.release(); }
 });
 
@@ -243,7 +261,7 @@ userRouter.get('/me', authMiddleware, async (req, res) => {
     );
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ user: rows[0] });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { console.error('[API]', err); res.status(500).json({ error: 'Internal server error' }); }
   finally { client.release(); }
 });
 
@@ -258,7 +276,7 @@ userRouter.get('/orders', authMiddleware, async (req, res) => {
     if (!strapiRes.ok) return res.status(502).json({ error: 'Failed to fetch orders' });
     const data = await strapiRes.json();
     res.json({ orders: data.data || [] });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { console.error('[API]', err); res.status(500).json({ error: 'Internal server error' }); }
 });
 
 // ─── POST /users/merge-cart ───────────────────────────────────────────────────
@@ -347,14 +365,14 @@ userRouter.post('/merge-cart', authMiddleware, async (req, res) => {
     res.json({ success: true, newSessionId });
   } catch (err: any) {
     console.error('[MergeCart]', err.message);
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   } finally { client.release(); }
 });
 
 // ─── POST /users/forgot-password ─────────────────────────────────────────────
 userRouter.post('/forgot-password', otpLimiter, async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ error: 'email is required' });
+  if (typeof email !== 'string' || email.length > 254) return res.status(400).json({ error: 'email is required' });
 
   const client = await pool.connect();
   try {
@@ -388,7 +406,7 @@ userRouter.post('/forgot-password', otpLimiter, async (req, res) => {
 // ─── POST /users/reset-password ──────────────────────────────────────────────
 userRouter.post('/reset-password', authLimiter, async (req, res) => {
   const { token, newPassword } = req.body;
-  if (!token || !newPassword)
+  if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token) || typeof newPassword !== 'string' || Buffer.byteLength(newPassword, 'utf8') > 72)
     return res.status(400).json({ error: 'token and newPassword are required' });
   if (newPassword.length < 8)
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
@@ -396,13 +414,16 @@ userRouter.post('/reset-password', authLimiter, async (req, res) => {
   const tokenHash = hashToken(token);
   const client = await pool.connect();
   try {
-    // Look up email by token — no need for email in the URL
+    await client.query('BEGIN');
+    // Consume the token atomically; a concurrent reset cannot reuse it.
     const { rows } = await client.query(
-      'SELECT id, email FROM commerce_password_resets WHERE token_hash = $1 AND used = false AND expires_at > NOW()',
+      'UPDATE commerce_password_resets SET used = true WHERE token_hash = $1 AND used = false AND expires_at > NOW() RETURNING id, email',
       [tokenHash]
     );
-    if (rows.length === 0)
+    if (rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Reset link is invalid or has expired' });
+    }
 
     const email = rows[0].email;
     const passwordHash = await bcrypt.hash(newPassword, 12);
@@ -410,14 +431,17 @@ userRouter.post('/reset-password', authLimiter, async (req, res) => {
       'UPDATE commerce_users SET password_hash = $1, updated_at = NOW() WHERE email = $2 RETURNING id',
       [passwordHash, email]
     );
-    if (userRes.rows.length === 0)
+    if (userRes.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Account not found' });
-
-    await client.query('UPDATE commerce_password_resets SET used = true WHERE id = $1', [rows[0].id]);
+    }
+    await client.query('UPDATE commerce_password_resets SET used = true WHERE email = $1 AND used = false', [email]);
     await client.query('DELETE FROM commerce_refresh_tokens WHERE user_id = $1', [userRes.rows[0].id]);
 
+    await client.query('COMMIT');
     res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
   } catch (err: any) {
+    await client.query('ROLLBACK');
     console.error('[ResetPassword]', err.message);
     res.status(500).json({ error: 'Password reset failed' });
   } finally { client.release(); }

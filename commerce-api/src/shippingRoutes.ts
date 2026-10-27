@@ -64,6 +64,6 @@ shippingRouter.get('/tracking/:trackingCode', async (req, res) => {
     res.json({ success: true, tracking: data });
   } catch (err: any) {
     console.error('[ShippingTracking]', err.message);
-    res.status(500).json({ error: 'Failed to fetch tracking data', message: err.message });
+    res.status(500).json({ error: 'Failed to fetch tracking data' });
   }
 });

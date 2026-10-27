@@ -19,7 +19,7 @@ router.get('/admin/inventory', adminApiKeyMiddleware, async (req, res) => {
     const { rows } = await pool.query('SELECT * FROM commerce_inventory ORDER BY strapi_id ASC');
     res.json({ count: rows.length, inventory: rows });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -45,7 +45,7 @@ router.post('/admin/seed-inventory', adminApiKeyMiddleware, async (req, res) => 
     `, [strapi_id, slug, name || slug, price || 0, stock ?? 0]);
     res.json({ success: true, message: `Inventory seeded for strapi_id=${strapi_id}, slug=${slug}` });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -57,7 +57,7 @@ router.post('/admin/release-stuck', adminApiKeyMiddleware, async (req, res) => {
     const rows = await releasePendingTransactions('all');
     res.json({ success: true, released: rows.length });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -69,7 +69,7 @@ router.post('/admin/clear-inventory', adminApiKeyMiddleware, async (req, res) =>
     await pool.query('TRUNCATE TABLE commerce_inventory RESTART IDENTITY');
     res.json({ success: true, message: 'Inventory table cleared' });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -108,7 +108,7 @@ router.post('/admin/sync-from-strapi', adminApiKeyMiddleware, async (req, res) =
 
     res.json({ success: true, synced, products: results });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -435,7 +435,7 @@ router.post('/payments/confirm-cod', checkoutLimiter, async (req, res) => {
 
   } catch (err: any) {
     if (!released) await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   } finally {
     if (!released) client.release();
   }
@@ -524,7 +524,7 @@ router.post('/payments/confirm-bkash', checkoutLimiter, async (req, res) => {
 
   } catch (err: any) {
     if (!released) await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   } finally {
     if (!released) client.release();
   }

@@ -10,20 +10,20 @@ export default {
     translations: {
       en: {
         'app.components.LeftMenu.navbrand.title': 'Premium Store',
-        'app.components.LeftMenu.navbrand.workplace': 'CMS Dashboard',
+        'app.components.LeftMenu.navbrand.workplace': 'Store management',
         'Auth.form.welcome.title': 'Premium Store Admin',
-        'Auth.form.welcome.subtitle': 'Manage your storefront content',
+        'Auth.form.welcome.subtitle': 'Manage products, orders, and storefront content in one place.',
       },
     },
     // Dark editorial palette matching the storefront
     theme: {
       dark: {
         colors: {
-          primary100: '#1a1a1a',
-          primary200: '#2a2a2a',
+          primary100: '#29213d',
+          primary200: '#3b2d59',
           primary500: '#a78bfa',
-          primary600: '#8b5cf6',
-          primary700: '#7c3aed',
+          primary600: '#a78bfa',
+          primary700: '#c4b5fd',
           danger500: '#f43f5e',
           danger600: '#e11d48',
           success500: '#22c55e',
@@ -33,9 +33,9 @@ export default {
           neutral150: '#1a1a1a',
           neutral200: '#222222',
           neutral300: '#333333',
-          neutral400: '#555555',
-          neutral500: '#777777',
-          neutral600: '#999999',
+          neutral400: '#737373',
+          neutral500: '#a3a3a3',
+          neutral600: '#b8b8b8',
           neutral700: '#bbbbbb',
           neutral800: '#dddddd',
           neutral900: '#f5f5f5',

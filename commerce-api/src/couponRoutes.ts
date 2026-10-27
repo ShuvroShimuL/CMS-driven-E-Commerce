@@ -128,7 +128,7 @@ couponRouter.get('/admin', adminApiKeyMiddleware, async (req, res) => {
     );
     res.json({ success: true, count: rows.length, coupons: rows });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -143,7 +143,7 @@ couponRouter.patch('/admin/:id/deactivate', adminApiKeyMiddleware, async (req, r
     if (rows.length === 0) return res.status(404).json({ error: 'Coupon not found' });
     res.json({ success: true, coupon: rows[0] });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -158,7 +158,7 @@ couponRouter.patch('/admin/:id/activate', adminApiKeyMiddleware, async (req, res
     if (rows.length === 0) return res.status(404).json({ error: 'Coupon not found' });
     res.json({ success: true, coupon: rows[0] });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -213,7 +213,7 @@ couponRouter.delete('/admin/:id', adminApiKeyMiddleware, async (req, res) => {
     if (rowCount === 0) return res.status(404).json({ error: 'Coupon not found' });
     res.json({ success: true, message: 'Coupon deleted' });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -229,7 +229,7 @@ couponRouter.get('/admin/dlq', adminApiKeyMiddleware, async (req, res) => {
     );
     res.json({ success: true, count: rows.length, events: rows });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -241,7 +241,7 @@ couponRouter.get('/admin/dlq/all', adminApiKeyMiddleware, async (req, res) => {
     );
     res.json({ success: true, count: rows.length, events: rows });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -255,7 +255,7 @@ couponRouter.patch('/admin/dlq/:id/resolve', adminApiKeyMiddleware, async (req, 
     if (rows.length === 0) return res.status(404).json({ error: 'DLQ entry not found' });
     res.json({ success: true, event: rows[0] });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -285,6 +285,6 @@ couponRouter.get('/admin/stats', adminApiKeyMiddleware, async (req, res) => {
       })),
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });

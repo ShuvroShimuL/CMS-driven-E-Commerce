@@ -4,17 +4,17 @@ import { timingSafeEqual } from 'crypto';
 
 // ─── Admin API Key Middleware ──────────────────────────────────────────────────
 // Protects all /admin/* routes. Set ADMIN_API_KEY in Render env vars.
-const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
 export function adminApiKeyMiddleware(req: Request, res: Response, next: NextFunction) {
-  if (!ADMIN_API_KEY) {
+  const adminKey = process.env.ADMIN_API_KEY;
+  if (!adminKey) {
     // If no key is configured, deny all access to prevent accidental exposure
     return res.status(503).json({ error: 'Admin API not configured' });
   }
 
   const provided = req.headers['x-admin-api-key'] as string | undefined;
 
-  if (!provided || provided !== ADMIN_API_KEY) {
+  if (!provided || Buffer.byteLength(provided) !== Buffer.byteLength(adminKey) || !timingSafeEqual(Buffer.from(provided), Buffer.from(adminKey))) {
     return res.status(401).json({ error: 'Unauthorized: Invalid or missing admin API key' });
   }
 

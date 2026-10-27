@@ -270,3 +270,31 @@ test('refresh token rotation rejects reuse of the previous token', async () => {
   assert.equal((await post('/users/refresh', {}, { authorization: `Bearer ${token}` })).status, 401);
   assert.equal((await post('/users/refresh', {}, { authorization: `Bearer ${response.body.refreshToken}` })).status, 200);
 });
+
+ test('registration replaces an unverified password and verification requires the new password', async () => {
+  const email = 'registration-security@example.test';
+  await query('DELETE FROM commerce_users WHERE email = $1', [email]);
+  assert.equal((await post('/users/register', { email, password: 'attacker-password', full_name: 'Attacker' })).status, 200);
+  const oldOtp = (await query('SELECT otp_code FROM commerce_otps WHERE email = $1 ORDER BY id DESC LIMIT 1', [email])).rows[0].otp_code;
+  assert.equal((await post('/users/register', { email, password: 'customer-password', full_name: 'Customer' })).status, 200);
+  const otp = (await query('SELECT otp_code FROM commerce_otps WHERE email = $1 ORDER BY id DESC LIMIT 1', [email])).rows[0].otp_code;
+  assert.equal((await post('/users/verify-otp', { email, otp: oldOtp, password: 'attacker-password' })).status, 400);
+  assert.equal((await post('/users/verify-otp', { email, otp, password: 'attacker-password' })).status, 400);
+  assert.equal((await post('/users/verify-otp', { email, otp, password: 'customer-password' })).status, 200);
+  assert.equal((await post('/users/verify-otp', { email, otp, password: 'customer-password' })).status, 400);
+  assert.equal((await post('/users/resend-otp', { email })).status, 404);
+  assert.equal((await post('/users/login', { email, password: 'attacker-password' })).status, 401);
+  assert.equal((await post('/users/login', { email, password: 'customer-password' })).status, 200);
+});
+
+test('password reset consumes the token and invalidates other reset links', async () => {
+  const email = 'reset-security@example.test';
+  await query('DELETE FROM commerce_users WHERE email = $1', [email]);
+  await query(`INSERT INTO commerce_users (email, password_hash, is_verified) VALUES ($1, 'unused', true)`, [email]);
+  const first = 'a'.repeat(64), second = 'b'.repeat(64);
+  await query(`INSERT INTO commerce_password_resets (email, token_hash, expires_at) VALUES ($1, $2, NOW() + INTERVAL '1 hour'), ($1, $3, NOW() + INTERVAL '1 hour')`, [email, hashToken(first), hashToken(second)]);
+  assert.equal((await post('/users/reset-password', { token: first, newPassword: 'new-password' })).status, 200);
+  assert.equal((await post('/users/reset-password', { token: first, newPassword: 'another-password' })).status, 400);
+  assert.equal((await post('/users/reset-password', { token: second, newPassword: 'another-password' })).status, 400);
+  assert.equal((await post('/users/login', { email, password: 'new-password' })).status, 200);
+});

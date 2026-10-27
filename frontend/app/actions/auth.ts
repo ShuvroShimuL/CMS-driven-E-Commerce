@@ -70,11 +70,12 @@ export async function registerUser(formData: FormData) {
 export async function verifyOTP(formData: FormData) {
   const email = formData.get('email') as string;
   const otp   = formData.get('otp')   as string;
+  const password = formData.get('password') as string;
   try {
     const res  = await fetch(`${COMMERCE_API}/users/verify-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, otp })
+      body: JSON.stringify({ email, otp, password })
     });
     const json = await res.json();
     if (!res.ok) return { success: false, error: json.error || 'OTP verification failed' };

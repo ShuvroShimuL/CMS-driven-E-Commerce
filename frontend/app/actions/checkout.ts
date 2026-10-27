@@ -3,7 +3,7 @@
 import { getCart, clearCart } from './cart';
 import nodemailer from 'nodemailer';
 
-const ADMIN_EMAIL  = process.env.ADMIN_EMAIL || 'shamimrshimul0403@gmail.com';
+const ADMIN_EMAIL  = process.env.ADMIN_EMAIL || '';
 const GMAIL_USER   = process.env.GMAIL_USER || '';
 const GMAIL_PASS   = process.env.GMAIL_APP_PASSWORD || '';
 const COMMERCE_API = process.env.COMMERCE_API_URL || 'http://localhost:4000/api/v1';
@@ -136,6 +136,12 @@ export async function processCheckout(formData: FormData) {
 }
 
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[char] as string));
+}
+
 // ─── Customer Email (Gmail) ──────────────────────────────────────────────────
 async function sendCustomerEmail(
   email: string, name: string, orderId: string,
@@ -146,7 +152,7 @@ async function sendCustomerEmail(
 
   const itemRows = items.map((item: any) =>
     `<tr>
-      <td style="padding:8px;border-bottom:1px solid #222;color:#f5f5f5">${item.title}</td>
+      <td style="padding:8px;border-bottom:1px solid #222;color:#f5f5f5">${escapeHtml(item.title)}</td>
       <td style="padding:8px;border-bottom:1px solid #222;text-align:center;color:#a0a0a0">${item.quantity}</td>
       <td style="padding:8px;border-bottom:1px solid #222;text-align:right;color:#f5f5f5">Tk ${(parseFloat(item.price) * item.quantity).toFixed(2)}</td>
     </tr>`
@@ -156,7 +162,7 @@ async function sendCustomerEmail(
   const paymentNote = isBkash
     ? `<p style="background:#1a1a1a;padding:12px;border:1px solid rgba(226,19,110,0.3);color:#e2136e">
         <strong>Payment:</strong> bKash<br/>
-        <strong>TxnID:</strong> ${bkashTxnId}<br/>
+        <strong>TxnID:</strong> ${escapeHtml(bkashTxnId)}<br/>
         <em style="color:#a0a0a0">Your payment is being verified.</em>
        </p>`
     : `<p style="color:#a0a0a0">You will pay the courier upon delivery. We'll dispatch your order shortly!</p>`;
@@ -169,7 +175,7 @@ async function sendCustomerEmail(
       subject: `Order ${isBkash ? 'Received' : 'Confirmed'} #${orderId} — Premium Store`,
       html: `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#0a0a0a;color:#f5f5f5">
-          <h2>🎉 Thank you, ${name}!</h2>
+          <h2>🎉 Thank you, ${escapeHtml(name)}!</h2>
           <p>Your order <strong>#${orderId}</strong> has been ${isBkash ? 'received and is pending payment verification' : 'confirmed'}.</p>
           <table style="width:100%;border-collapse:collapse;margin:16px 0">
             <thead><tr style="background:#1a1a1a">
@@ -184,7 +190,7 @@ async function sendCustomerEmail(
             </tr></tfoot>
           </table>
           <p><strong>Delivery Address:</strong><br/>
-            <span style="color:#a0a0a0">${customer.fullAddress}, ${customer.thana}, ${customer.district}, ${customer.division}</span>
+            <span style="color:#a0a0a0">${escapeHtml(customer.fullAddress)}, ${escapeHtml(customer.thana)}, ${escapeHtml(customer.district)}, ${escapeHtml(customer.division)}</span>
           </p>
           ${paymentNote}
           <hr style="border:none;border-top:1px solid #222;margin:24px 0"/>
@@ -203,17 +209,17 @@ async function sendAdminEmail(
   items: any[], subtotal: number, shippingCost: number, customer: any,
   paymentLabel: string, bkashTxnId: string, total: number
 ) {
-  if (!GMAIL_USER || !GMAIL_PASS) return;
+  if (!GMAIL_USER || !GMAIL_PASS || !ADMIN_EMAIL) return;
 
   const isBkash = paymentLabel === 'bKash';
   const itemList = items.map((item: any) =>
-    `<li>${item.title} × ${item.quantity} — Tk ${(parseFloat(item.price) * item.quantity).toFixed(2)}</li>`
+    `<li>${escapeHtml(item.title)} × ${item.quantity} — Tk ${(parseFloat(item.price) * item.quantity).toFixed(2)}</li>`
   ).join('');
 
   const bkashBlock = isBkash
     ? `<div style="background:rgba(226,19,110,0.1);padding:12px;margin:12px 0;border:1px solid #e2136e">
         <strong style="color:#e2136e">⚠️ bKash — Verification Required</strong><br/>
-        <strong>TxnID:</strong> ${bkashTxnId}<br/>
+        <strong>TxnID:</strong> ${escapeHtml(bkashTxnId)}<br/>
         <em>Verify in bKash app, then update order status in Strapi.</em>
        </div>`
     : '';
@@ -234,10 +240,10 @@ async function sendAdminEmail(
           <hr/>
           <h3>Customer Details</h3>
           <p>
-            <strong>Name:</strong> ${customerName}<br/>
-            <strong>Email:</strong> ${customerEmail}<br/>
-            <strong>Phone:</strong> ${customer.phone}<br/>
-            <strong>Address:</strong> ${customer.fullAddress}, ${customer.thana}, ${customer.district}, ${customer.division}
+            <strong>Name:</strong> ${escapeHtml(customerName)}<br/>
+            <strong>Email:</strong> ${escapeHtml(customerEmail)}<br/>
+            <strong>Phone:</strong> ${escapeHtml(customer.phone)}<br/>
+            <strong>Address:</strong> ${escapeHtml(customer.fullAddress)}, ${escapeHtml(customer.thana)}, ${escapeHtml(customer.district)}, ${escapeHtml(customer.division)}
           </p>
           <hr/>
           <h3>Items</h3>

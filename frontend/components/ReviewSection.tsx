@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import styles from './ReviewSection.module.css';
+import { submitReview } from '@/app/actions/reviews';
 
 const COMMERCE_API = process.env.NEXT_PUBLIC_COMMERCE_API_URL || 'http://localhost:4000/api/v1';
 
@@ -113,37 +114,10 @@ export default function ReviewSection({ productId, productSlug }: {
     setSubmitting(true);
     setMessage(null);
 
-    // Read access token from httpOnly cookie via API proxy
-    let token: string | null = null;
     try {
-      const tokenRes = await fetch('/api/auth/token');
-      const tokenData = await tokenRes.json();
-      token = tokenData.token;
-    } catch {}
-    if (!token) {
-      setMessage({ type: 'error', text: 'Please log in to submit a review' });
-      setSubmitting(false);
-      return;
-    }
+      const data = await submitReview(productId, productSlug, rating, comment.trim());
 
-    try {
-      const res = await fetch(`${COMMERCE_API}/reviews`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          productId,
-          productSlug,
-          rating,
-          comment: comment.trim(),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok && data.success) {
+      if (data.success) {
         setMessage({ type: 'success', text: 'Review submitted! It will appear after admin approval.' });
         setRating(0);
         setComment('');

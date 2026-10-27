@@ -95,6 +95,25 @@ The old maintenance scripts contained database and Strapi credentials. Rotate
 both exposed credentials before deployment; removing them from the working tree
 does not remove them from Git history. Scripts now require environment variables.
 
+### Security and deployment notes
+
+Account verification requires both the emailed code and the registration password.
+Re-registering an unverified email replaces its pending password and invalidates
+older codes. Configure strong, unique Strapi secrets (`APP_KEYS`, `ADMIN_JWT_SECRET`,
+`API_TOKEN_SALT`, and `TRANSFER_TOKEN_SALT`); development fallback secrets have
+been removed. Database TLS now verifies certificates in both services. For a
+private CA, set `DATABASE_SSL_CA` to its PEM certificate (literal `\n` escapes
+are supported); ensure PostgreSQL connection URL SSL parameters do not override
+the configured verification. The CMS also needs `DATABASE_SSL=true` for TLS.
+Verify connectivity in staging before deployment.
+
+Set `ADMIN_EMAIL` in the storefront if order notification emails should be sent
+to an operator. Without it, admin order emails are skipped rather than sent to a
+default address. Resetting a password revokes refresh tokens, but already issued
+access tokens remain valid for up to 15 minutes.
+
+See `SECURITY_REVIEW.md` for the remaining dependency and integration findings.
+
 ### Local regression checks
 
 Run `npm test` in `commerce-api`. Tests use an isolated in-memory PostgreSQL

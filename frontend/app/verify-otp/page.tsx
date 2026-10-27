@@ -10,6 +10,7 @@ function VerifyOTPForm() {
   const searchParams = useSearchParams();
   const email        = searchParams.get('email') || '';
 
+  const [password, setPassword] = useState('');
   const [otp, setOtp]         = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -51,6 +52,7 @@ function VerifyOTPForm() {
     const formData = new FormData();
     formData.set('email', email);
     formData.set('otp', code);
+    formData.set('password', password);
     const result = await verifyOTP(formData);
     if (result.success) {
       router.replace('/account');
@@ -64,7 +66,13 @@ function VerifyOTPForm() {
   const handleResend = async () => {
     setResending(true);
     setResent(false);
-    await resendOTP(email);
+    const result = await resendOTP(email);
+    if (!result.success) {
+      setError(result.error || 'Could not resend the code. Please try again.');
+      setResending(false);
+      return;
+    }
+    setError(null);
     setResent(true);
     setResending(false);
     setOtp(['', '', '', '', '', '']);
@@ -102,6 +110,10 @@ function VerifyOTPForm() {
             />
           ))}
         </div>
+
+        <label htmlFor="verify-password">Registration password</label>
+        <input id="verify-password" type="password" autoComplete="current-password" required
+          value={password} onChange={(event) => setPassword(event.target.value)} className={styles.input} />
 
         <button type="submit" className={styles.submitBtn} disabled={loading}>
           {loading ? 'Verifying…' : 'Verify Email'}

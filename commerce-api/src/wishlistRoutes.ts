@@ -17,7 +17,7 @@ wishlistRouter.get('/', async (req, res) => {
     );
     res.json({ items: rows });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -31,7 +31,7 @@ wishlistRouter.get('/ids', async (req, res) => {
     );
     res.json({ ids: rows.map(r => r.product_strapi_id) });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -67,6 +67,6 @@ wishlistRouter.post('/toggle', async (req, res) => {
       res.json({ action: 'added', product_strapi_id });
     }
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error('[API]', err); res.status(500).json({ error: 'Internal server error' });
   }
 });

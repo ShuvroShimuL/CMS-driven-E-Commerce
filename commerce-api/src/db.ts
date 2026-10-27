@@ -3,15 +3,12 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Supabase's connection pooler uses intermediate certificates that Node.js
-// doesn't natively trust. rejectUnauthorized must be false for pooler connections.
-// This is safe because traffic is still encrypted via TLS — we just skip
-// certificate chain verification (a documented Supabase requirement).
+// Verify the server certificate. Set DATABASE_SSL_CA for private certificate authorities.
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL?.includes('localhost')
+  ssl: process.env.DATABASE_URL && ['localhost', '127.0.0.1', '[::1]'].includes(new URL(process.env.DATABASE_URL).hostname)
     ? false
-    : { rejectUnauthorized: false }
+    : { rejectUnauthorized: true, ...(process.env.DATABASE_SSL_CA ? { ca: process.env.DATABASE_SSL_CA.replace(/\\n/g, '\n') } : {}) }
 });
 
 pool.on('error', (err) => {
